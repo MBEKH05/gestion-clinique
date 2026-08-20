@@ -1,0 +1,91 @@
+services:
+  app:
+    build:
+      context: ./docker/backend
+    container_name: clinique_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+
+  frontend-build:
+    image: node:20-alpine
+    container_name: clinique_frontend_build
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      # node_modules reste dans un volume Docker (pas sur le bind mount) :
+      # evite les soucis de permissions/symlinks entre l'hote et le
+      # conteneur, et un install nettement plus rapide.
+      - frontend_node_modules:/app/node_modules
+    environment:
+      REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL}
+    command: sh -c "npm ci && npm run build"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: clinique_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "7777:7777"
+      - "7778:7778"
+      - "7779:7779"
+    volumes:
+      - ./docker/nginx/${NGINX_CONF:-nginx.http.conf}:/etc/nginx/nginx.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./backend:/var/www/html:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    depends_on:
+      - app
+    networks: [internal]
+
+  certbot:
+    image: certbot/certbot
+    container_name: clinique_certbot
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    entrypoint: >
+      /bin/sh -c "trap exit TERM; while :; do sleep 12h & wait $${!}; certbot renew --webroot -w /var/www/certbot; done"
+
+  db:
+    image: mariadb:11
+    container_name: clinique_db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_USER: ${DB_USERNAME}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [internal]
+
+  adminer:
+    image: adminer:latest
+    container_name: clinique_adminer
+    restart: unless-stopped
+    networks: [internal]
+
+volumes:
+  db_data:
+  certbot_www:
+  certbot_conf:
+  frontend_node_modules:
+
+networks:
+  internal:
+    driver: bridge

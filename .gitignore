@@ -1,0 +1,12 @@
+# Secrets docker-compose (genere depuis .env.docker.example)
+.env
+
+# Frontend build genere par le conteneur frontend-build
+frontend/dist
+
+# Fichiers de scratch/tests ponctuels
+*.local
+
+# Dumps de base de donnees : contiennent des donnees patients reelles
+# (noms, telephones, resultats) -- ne doivent jamais partir sur GitHub.
+backend/database/*.sql

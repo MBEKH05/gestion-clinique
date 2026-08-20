@@ -1,0 +1,1482 @@
+================================================================================
+       DOCUMENTATION COMPLETE — FACTURATION CLINIQUE SOPE NABY
+================================================================================
+Generee le : 16/08/2026
+Auteur : Documentation exhaustive pour reproduction de la plateforme
+================================================================================
+
+
+================================================================================
+1. APERCU GENERAL DE L'APPLICATION
+================================================================================
+
+Nom de la clinique : CLINIQUE SOPE NABY
+Domaine de production : facturation.cliniquenaby.com
+Type : Application web SPA (Single Page Application) de facturation medicale
+But : Gerer les analyses medicales, IPM, assurances, patients, devis/factures
+      et statistiques pour une clinique au Senegal
+Monnaie : FCFA (Franc CFA ouest-africain)
+Langue interface : Francais (fr-FR)
+
+Contact clinique :
+  - Telephone : +221 33 836 29 79
+  - Email : cliniquenaby13@gmail.com
+  - Logo PDF : /NABY.jpg
+  - Logo sidebar : /logo-facturation.png
+
+
+================================================================================
+2. STACK TECHNIQUE
+================================================================================
+
+--- FRONTEND ---
+- React 18
+- Routage : HashRouter (URLs de type /#/dashboard)
+- Icones : Bootstrap Icons (bi-*)
+- PDF : jsPDF + html2canvas
+- HTTP : Axios avec intercepteurs JWT
+- Etat global : Context API (AuthContext + DataContext)
+- Cache local : localStorage (tokens JWT + cache donnees 1h)
+- Variables env : REACT_APP_API_BASE_URL (defaut: '/api')
+
+--- BACKEND ---
+- Django REST Framework (DRF)
+- Auth : djangorestframework-simplejwt (JWT)
+- Base de donnees : MySQL
+  - host : db (Docker)
+  - port : 3306
+  - charset : utf8mb4
+  - database : facturation_clinique
+  - user : root
+  - password : p@ssword123
+- Reverse proxy : Nginx avec SSL
+
+--- DEPLOIEMENT ---
+- Docker (service 'db' pour MySQL)
+- Nginx en amont avec SSL
+- CORS configure pour localhost:3000 et facturation.cliniquenaby.com
+
+
+================================================================================
+3. SYSTEME D'AUTHENTIFICATION ET PERMISSIONS
+================================================================================
+
+--- JWT (JSON Web Tokens) ---
+- Algorithme : HS256
+- Duree token acces : 24 heures
+- Duree token refresh : 7 jours
+- Rotation des tokens : activee (nouveau refresh a chaque utilisation)
+- Blacklist apres rotation : activee
+- Stockage : localStorage
+  - Cles : 'access_token' et 'refresh_token'
+- Auto-refresh : intercepteurs Axios renouvellent sur erreur 401/403
+
+--- ROLES UTILISATEURS ---
+Il n'y a que DEUX roles :
+
+1. Super Admin (is_superuser = True)
+   - Acces COMPLET a toutes les fonctionnalites
+   - Peut supprimer des devis
+   - Peut activer/desactiver IPM et Assurances
+   - Acces aux Categories, Statistiques, Detail de Prestation
+
+2. Manager (is_superuser = False, authentifie)
+   - Peut creer/modifier devis, patients, analyses, tarifs
+   - NE PEUT PAS supprimer des devis
+   - NE PEUT PAS activer/desactiver IPM/Assurances
+   - PAS acces aux Categories, Statistiques, Detail de Prestation
+
+--- PERMISSIONS DJANGO (backend/api/permissions.py) ---
+- IsAdminUser : Superusers authentifies seulement
+  Utilise pour : delete devis, activate/deactivate IPM/assurance, categories CRUD, statistiques
+- IsAdminOrManager : Tout utilisateur authentifie
+  Utilise pour : lecture et ecriture analyses, IPM, assurances, tarifs, patients, devis (sauf delete)
+- IsAdminOrReadOnly : Lecture pour tous, ecriture pour admin (defini mais peu utilise)
+
+--- PROTECTION BRUTE-FORCE (backend/api/security.py) ---
+- Classe : RateLimiter
+- max_attempts : 5 tentatives
+- window_seconds : 300 secondes (5 minutes)
+- lockout_duration : 900 secondes (15 minutes)
+- Identification par IP (support X-Forwarded-For pour Nginx)
+- Logs : security.log + console
+
+--- MIDDLEWARE (backend/api/middleware.py) ---
+1. InputValidationMiddleware
+   - Verifie taille des requetes (max 10MB)
+   - Valide le JSON entrant
+
+2. DisableCSRFForAuth
+   - Desactive CSRF pour /api/* avec Bearer token ou /api/auth/*
+
+3. SecurityHeadersMiddleware
+   - Ajoute headers securite :
+     X-Content-Type-Options: nosniff
+     X-Frame-Options: DENY
+     X-XSS-Protection: 1; mode=block
+     Referrer-Policy: strict-origin-when-cross-origin
+     Cache-Control: no-store pour /api/*
+
+--- TABLEAU PERMISSIONS PAR FONCTIONNALITE ---
+
+Fonctionnalite                          Manager    Super Admin
+--------------------------------------------------------------
+Dashboard                               Oui        Oui (complet)
+Base de donnees (CRUD analyses)         Oui        Oui
+IPM (liste, creer, modifier)            Oui        Oui
+IPM (supprimer, activer, desactiver)    Non        Oui
+Assurances (liste, creer, modifier)     Oui        Oui
+Assurances (supprimer, activer)         Non        Oui
+Tarifs (CRUD)                           Oui        Oui
+Patients (CRUD)                         Oui        Oui
+Categories (CRUD)                       Non        Oui
+Devis (creer, modifier, voir)           Oui        Oui
+Devis (supprimer)                       Non        Oui
+Historique                              Oui        Oui
+Devis Proforma (creer, voir)            Oui        Oui
+Devis Proforma (supprimer)              Non        Oui
+Factures mensuelles                     Oui        Oui
+Statistiques                            Non        Oui
+Suivi Factures                          Non        Oui
+Detail de prestation                    Non        Oui
+
+
+================================================================================
+4. MODELES BASE DE DONNEES
+================================================================================
+
+--- CATEGORIE ---
+Table : categories
+Cle primaire : nom (CharField 50, unique)
+Champs :
+  - nom (CharField 50) — ex: "analyses", "radiographie"
+  - actif (Boolean, default=True)
+  - created_at (auto_now_add)
+Ordre : par nom
+
+--- ANALYSE ---
+Table : analyses
+Cle primaire : id (CharField 50, UUID)
+Champs :
+  - id (CharField 50, UUID auto-genere)
+  - nom (CharField 500)
+  - categorie (CharField 50, default='analyses')
+  - created_at (auto_now_add)
+Ordre : par nom
+
+--- IPM ---
+Table : ipms
+Cle primaire : id (CharField 50, UUID)
+Champs :
+  - id (CharField 50, UUID)
+  - nom (CharField 255)
+  - actif (Boolean, default=True)
+  - created_at (auto_now_add)
+Ordre : par nom
+
+--- ASSURANCE ---
+Table : assurances
+Cle primaire : id (CharField 50, UUID)
+Champs :
+  - id (CharField 50, UUID)
+  - nom (CharField 255)
+  - actif (Boolean, default=True)
+  - created_at (auto_now_add)
+Ordre : par nom
+
+--- TARIF ---
+Table : tarifs
+Cle primaire : id (CharField 50, UUID)
+Champs :
+  - id (CharField 50, UUID)
+  - analyse (FK -> Analyse, CASCADE)
+  - type_prise_en_charge (choices: 'IPM' / 'ASSURANCE', nullable)
+  - ipm (FK -> IPM, CASCADE, nullable)
+  - assurance (FK -> Assurance, CASCADE, nullable)
+  - prix (Decimal 15,2, min=0)
+  - created_at (auto_now_add)
+Ordre : par -created_at
+IMPORTANT : Les tarifs sont GENERIQUES et PARTAGES.
+  - type_prise_en_charge='IPM' = s'applique a TOUTES les IPM
+  - type_prise_en_charge='ASSURANCE' = s'applique a TOUTES les assurances
+
+--- PATIENT ---
+Table : patients
+Cle primaire : id (CharField 50, UUID)
+Champs :
+  - id (CharField 50, UUID)
+  - nom_complet (CharField 255)
+  - matricule (CharField 100)
+  - type_prise_en_charge (choices: 'IPM' / 'ASSURANCE')
+  - ipm (FK -> IPM, SET_NULL, nullable)
+  - assurance (FK -> Assurance, SET_NULL, nullable)
+  - created_at (auto_now_add)
+Ordre : par -created_at
+
+--- DEVIS ---
+Table : devis
+Cle primaire : id (CharField 100)
+Champs :
+  - id (CharField 100)
+  - numero (CharField 20, unique) — format : {annee}-{seq:05d} ex: 2026-00001
+  - patient (FK -> Patient, CASCADE)
+  - total (Decimal 15,2, default=0)
+  - souscripteur (CharField 255, nullable)
+  - taux_couverture (CharField 10, nullable) — ex: "80" pour 80%
+  - date_creation (auto_now_add)
+  - statut_paiement (choices: 'NON_REGE' / 'PARTIELLEMENT_REGLE' / 'REGLE', default='NON_REGLE')
+  - date_paiement (Date, nullable)
+  - commentaire_paiement (Text, nullable)
+  - is_proforma (Boolean, default=False)
+Ordre : par -date_creation
+Note : L'annee dans le numero est hardcodee a 2026 dans le serializer
+
+--- DEVIS LIGNE ---
+Table : devis_lignes
+Cle primaire : id (CharField 50, UUID)
+Champs :
+  - id (CharField 50, UUID)
+  - devis (FK -> Devis, CASCADE, related_name='lignes')
+  - analyse (FK -> Analyse, PROTECT)
+  - prix (Decimal 15,2, min=0)
+  - quantite (PositiveInteger, default=1, min=1)
+
+
+================================================================================
+5. API ENDPOINTS BACKEND
+================================================================================
+
+URL de base : /api/
+
+--- AUTH ---
+POST   /api/auth/login/
+  Permissions : AllowAny
+  Body : {username, password}
+  Reponse : {success, user, access, refresh}
+  Rate limiting : 5 tentatives / 5min, blocage 15min
+
+POST   /api/auth/logout/
+  Permissions : AllowAny
+  Body : {refresh}
+  Action : blackliste le token refresh
+
+GET    /api/auth/check/
+  Permissions : IsAuthenticated
+  Reponse : {authenticated, user}
+
+POST   /api/auth/token/refresh/
+  Permissions : AllowAny
+  Body : {refresh}
+  Reponse : {access}
+
+--- ANALYSES ---
+GET    /api/analyses/?page_size=1000         IsAdminOrManager  Liste analyses
+POST   /api/analyses/                        IsAdminOrManager  Creer analyse
+GET    /api/analyses/{id}/                   IsAdminOrManager  Detail analyse
+PUT    /api/analyses/{id}/                   IsAdminOrManager  Modifier analyse
+PATCH  /api/analyses/{id}/                   IsAdminOrManager  Modifier partiel
+DELETE /api/analyses/{id}/                   IsAdminOrManager  Supprimer analyse
+
+--- IPM ---
+GET    /api/ipms/?page_size=1000             IsAdminOrManager  Liste IPM
+POST   /api/ipms/                            IsAdminOrManager  Creer IPM
+GET    /api/ipms/{id}/                       IsAdminOrManager  Detail IPM
+PUT    /api/ipms/{id}/                       IsAdminOrManager  Modifier IPM
+DELETE /api/ipms/{id}/                       IsAdminOrManager  Supprimer IPM
+POST   /api/ipms/{id}/activate/              IsAdminUser       Activer IPM
+POST   /api/ipms/{id}/deactivate/            IsAdminUser       Desactiver IPM
+
+--- ASSURANCES ---
+GET    /api/assurances/?page_size=1000       IsAdminOrManager  Liste assurances
+POST   /api/assurances/                      IsAdminOrManager  Creer assurance
+GET    /api/assurances/{id}/                 IsAdminOrManager  Detail assurance
+PUT    /api/assurances/{id}/                 IsAdminOrManager  Modifier assurance
+DELETE /api/assurances/{id}/                 IsAdminOrManager  Supprimer assurance
+POST   /api/assurances/{id}/activate/        IsAdminUser       Activer assurance
+POST   /api/assurances/{id}/deactivate/      IsAdminUser       Desactiver assurance
+
+--- TARIFS ---
+GET    /api/tarifs/?page_size=1000           IsAdminOrManager  Liste tarifs
+POST   /api/tarifs/                          IsAdminOrManager  Creer tarif
+GET    /api/tarifs/{id}/                     IsAdminOrManager  Detail tarif
+PUT    /api/tarifs/{id}/                     IsAdminOrManager  Modifier tarif
+DELETE /api/tarifs/{id}/                     IsAdminOrManager  Supprimer tarif
+
+--- PATIENTS ---
+GET    /api/patients/?page_size=1000000      IsAdminOrManager  Liste patients
+POST   /api/patients/                        IsAdminOrManager  Creer patient
+GET    /api/patients/{id}/                   IsAdminOrManager  Detail patient
+PUT    /api/patients/{id}/                   IsAdminOrManager  Modifier patient
+DELETE /api/patients/{id}/                   IsAdminOrManager  Supprimer patient
+GET    /api/patients/search/?q=&page=&page_size=  IsAdminOrManager  Recherche
+
+--- DEVIS ---
+GET    /api/devis/?page=&page_size=&search=  IsAdminOrManager  Liste devis (is_proforma=False)
+  Params optionnels :
+    - page (numero de page)
+    - page_size (defaut 5000, max 1000000)
+    - search (filtre par nom patient, matricule, ou numero)
+    - ordering (ex: -date_creation)
+    - is_proforma=False (exclut les proforma)
+
+POST   /api/devis/                           IsAdminOrManager  Creer devis
+GET    /api/devis/{id}/                      IsAdminOrManager  Detail devis
+PUT    /api/devis/{id}/                      IsAdminOrManager  Modifier devis
+PATCH  /api/devis/{id}/                      IsAdminOrManager  Modifier partiel
+DELETE /api/devis/{id}/                      IsAdminUser       Supprimer devis (admin only)
+GET    /api/devis/proforma/                  IsAdminOrManager  Liste devis proforma
+PATCH  /api/devis/{id}/update_paiement/      IsAdminOrManager  Mettre a jour statut paiement
+  Body : {statutPaiement, datePaiement, commentairePaiement}
+
+--- DASHBOARD ---
+GET    /api/dashboard-stats/                 IsAuthenticated   Statistiques globales
+  Reponse :
+    - totalAnalyses
+    - totalIPM
+    - totalAssurances
+    - totalPatients
+    - totalDevis
+    - devisMois (devis du mois courant)
+    - totalMontantMois
+    - devisAujourdhui
+    - montantAujourdhui
+
+--- CATEGORIES ---
+GET    /api/categories/                          IsAdminUser  Liste categories
+POST   /api/categories/                          IsAdminUser  Creer categorie
+  Note : cree aussi une Analyse exemple dans la nouvelle categorie
+PUT    /api/categories/{nom}/                    IsAdminUser  Renommer categorie
+  Note : met a jour toutes les Analyses liees
+DELETE /api/categories/{nom}/                    IsAdminUser  Supprimer categorie
+  Note : echoue si des Analyses sont utilisees dans des DevisLigne
+POST   /api/categories/{nom}/activate            IsAdminUser  Activer categorie
+POST   /api/categories/{nom}/deactivate          IsAdminUser  Desactiver categorie
+
+--- STATISTIQUES ET FACTURES ---
+GET    /api/statistiques/paiement/?mois=&annee=  IsAdminUser  Stats paiements
+  Reponse :
+    statistiques : {nonRegles, partiellementRegles, regles, montantTotal}
+    factures : [{
+      id, numeroFacture, entiteNom, montantCouvert,
+      statutPaiement, datePaiement, commentairePaiement, devis_ids
+    }]
+
+GET    /api/factures-mensuelles/numero/          IsAuthenticated  Generer N° facture
+  Params : mois, annee, typePriseEnCharge, entiteId
+  Reponse : numero format FACT-YYYY-MM-XXX
+
+--- PAGINATION GLOBALE ---
+Classe : LargePageNumberPagination
+  - page_size par defaut : 5000
+  - page_size_query_param : 'page_size'
+  - max_page_size : 1000000
+
+
+================================================================================
+6. SERIALIZERS BACKEND
+================================================================================
+
+--- CategorieSerializer ---
+Champs : nom, actif, created_at (read-only)
+
+--- AnalyseSerializer ---
+Champs : id, nom, categorie, created_at (read-only)
+Validation nom : sanitize_string (max 200 car), obligatoire
+Validation categorie : sanitize_string (max 100 car)
+id : auto-genere UUID si absent
+
+--- IPMSerializer / AssuranceSerializer ---
+Champs : id, nom, actif, created_at (read-only)
+id : auto-genere UUID si absent
+
+--- TarifSerializer ---
+Champs : id, analyse (PK), type_prise_en_charge, ipm (PK, nullable),
+         assurance (PK, nullable), prix, created_at
+Validation prix : entre 0 et 1 000 000
+
+--- PatientSerializer ---
+Champs : id, nom_complet, matricule, type_prise_en_charge,
+         ipm (PK, nullable), assurance (PK, nullable), created_at
+Validation nom_complet : sanitize_string (max 200 car), obligatoire
+Validation matricule : sanitize_string (max 50 car)
+
+--- DevisLigneSerializer ---
+Champs : id, analyse (PK), analyseId (read-only=analyse.id),
+         analyse_nom (read-only), analyse_categorie (read-only), prix, quantite
+to_representation() : supprime le champ 'analyse', garde analyseId
+
+--- DevisSerializer ---
+Champs : id, numero, patient (PK), patient_nom (read-only),
+         patient_matricule (read-only), total, souscripteur, taux_couverture,
+         date_creation, lignes (nested), statut_paiement, date_paiement,
+         commentaire_paiement, is_proforma
+numero et date_creation : read-only
+
+--- DevisCreateSerializer ---
+Memes champs + lignes en ListField(DictField) write-only
+create() :
+  - Genere numero = {annee}-{seq:05d} (annee hardcodee 2026)
+  - Calcule total = somme(prix x quantite)
+  - Cree Devis + DevisLigne pour chaque ligne
+update() :
+  - Supprime toutes les anciennes lignes
+  - Recree les nouvelles
+  - Recalcule le total
+
+
+================================================================================
+7. VALIDATEURS BACKEND (backend/api/validators.py)
+================================================================================
+
+--- sanitize_string(value, max_length=500) ---
+- Convertit en string si necessaire
+- Supprime les balises HTML/XML (protection XSS)
+- Supprime les caracteres de controle (\x00-\x1f, \x7f-\x9f)
+- Verifie la longueur max
+- Detecte les patterns SQL suspects :
+  UNION SELECT, INSERT INTO, DELETE FROM, DROP TABLE,
+  EXEC, --, /*, ;, xp_, sp_
+- Raise ValidationError si suspect
+
+--- validate_numeric(value, min_value=None, max_value=None) ---
+- Convertit en float
+- Verifie min/max
+- Raise ValidationError si invalide
+
+--- validate_uuid(value) ---
+- Valide le format UUID
+- Raise ValidationError si invalide
+
+--- sanitize_input(data, field_validators=None) ---
+- Nettoie un dictionnaire entier de donnees
+- Applique sanitize_string par defaut sur les champs string
+- Ignore les cles de plus de 100 caracteres
+
+
+================================================================================
+8. CONVERTISSEURS API FRONTEND (frontend/src/utils/apiConverters.js)
+================================================================================
+
+Conversions snake_case <-> camelCase entre API et frontend :
+
+convertPatientFromAPI(patient) :
+  nom_complet -> nomComplet
+  type_prise_en_charge -> typePriseEnCharge
+  ipm -> ipmId
+  assurance -> assuranceId
+
+convertPatientToAPI(patient) :
+  Inverse de ci-dessus, convertit "" en null pour ipm/assurance
+
+convertDevisFromAPI(devis) :
+  patient -> patientId
+  taux_couverture -> tauxCouverture
+  is_proforma -> isProforma
+  lignes converties avec analyseId/nom/categorie/prix/quantite
+
+convertDevisToAPI(devis) :
+  Inverse de ci-dessus
+
+convertTarifFromAPI(tarif) :
+  analyse -> analyseId
+  type_prise_en_charge -> typePriseEnCharge
+  ipm -> ipmId
+  assurance -> assuranceId
+
+convertTarifToAPI(tarif) :
+  Si typePriseEnCharge present -> type_prise_en_charge generique + ipm=null + assurance=null
+  Sinon -> utilise ipmId/assuranceId specifiques
+
+
+================================================================================
+9. UTILITAIRES FRONTEND
+================================================================================
+
+--- devisUtils.js ---
+getDevisNumero(devis) :
+  - Si devis.numero contient '-' : retourne tel quel
+  - Si devis.numero est un nombre : retourne {annee}-{num:05d}
+  - Fallback : 6 derniers caracteres de devis.id
+
+--- categoryUtils.js ---
+getCategoryName(categorie) :
+  Extrait le nom d'un objet {nom, actif} ou retourne la string directement
+
+isCategoryActive(categorie) :
+  Retourne true si categorie.actif !== false (default: true pour strings)
+
+formatCategoryObject(categorie) :
+  Formate "Nom (Actif/Inactif)"
+
+formatCategoriesList(categories) :
+  Map sur un tableau
+
+--- pdfUtils.js ---
+Dependances : jsPDF, html2canvas
+
+generatePDFDevis(devis, patient, analyses, lignes, ipms, assurances, isProforma) :
+  Format : A4 portrait, marges 15mm
+  En-tete :
+    - Gauche : logo NABY.jpg + CLINIQUE SOPE NABY + telephone + email
+    - Droite : FACTURE N° + date
+  Ligne separatrice bleue (#1e3a5f)
+  Section patient :
+    - Nom, Souscripteur, Matricule
+    - Type de prise en charge (IPM/Assurance + nom entite)
+    - Date
+  Tableau des prestations groupe par categorie :
+    Ordre des categories : analyses, radiographie, hospitalisation,
+                           maternite, consultations, medicament, autres
+    En-tete tableau bleu (#667eea) : #, Categorie, Prix (FCFA)
+    Chaque categorie : fond gris pour le nom
+    Chaque ligne : numero + nom analyse + sous-total (prix x quantite)
+                   "x2" affiche si quantite > 1
+    Separateur noir entre categories
+  TOTAL
+  Si taux_couverture : Part patients %, Montant a payer (fond vert), Montant couvert
+  Signature : "La comptabilite" centre en bas
+  Watermark "PROFORMA" diagonal rouge translucide si is_proforma=true
+  Sauvegarde : devis-{numero}.pdf
+
+generatePDFDevisMensuel(devisList, entite, mois, typePriseEnCharge,
+                         patients, analyses, ipms, assurances, numeroFacture) :
+  Format : A4 portrait
+  En-tete unique : logo + clinique (gauche)
+                   FACTURE MENSUELLE + N° + Periode + Type + Nb devis (droite)
+  Pour chaque devis :
+    - Titre : N° + nom patient + matricule + date
+    - Optionnellement : souscripteur
+    - Tableau prestations groupe par categorie
+    - Sous-total
+  Separateur gris entre devis
+  Gestion sauts de page automatique
+  TOTAL GENERAL sur la derniere page
+  Signature "La comptabilite"
+  Sauvegarde : devis-mensuel-{mois}.pdf
+
+generatePDFListeFactures(factures, dateDebut, dateFin, statistiques) :
+  Format : A4 portrait
+  En-tete : logo + clinique, titre "SUIVI DES FACTURES MENSUELLES", periode
+  Resume : Non regles, Partiellement regles, Regles, Montant total
+  Tableau : N°, Numero facture, IPM/Assurance, Montant (FCFA), Statut (colore)
+  TOTAL GENERAL
+  Pied de page : "Genere par CLINIQUE SOPE NABY", numero de page
+  Sauvegarde : suivi-factures-{YYYY-MM}.pdf
+
+
+================================================================================
+10. DATACONTEXT (frontend/src/context/DataContext.js)
+================================================================================
+
+--- ETAT GLOBAL ---
+  - analyses : array
+  - ipms : array
+  - assurances : array
+  - tarifs : array
+  - patients : array
+  - devis : array
+  - categories : array (objets {nom, actif})
+  - devisCount : number
+
+--- CHARGEMENT INITIAL ---
+  Promise.all en parallele :
+    analysesAPI.getAll(), ipmsAPI.getAll(), assurancesAPI.getAll(),
+    tarifsAPI.getAll(), patientsAPI.getAll(), fetchRecentDevis(), categoriesAPI.getAll()
+  Cache localStorage :
+    Cle : 'facturation_clinique_cache_v2'
+    TTL : 3600 secondes (1 heure)
+    Contenu : analyses, ipms, assurances, tarifs, patients, categories
+    NOTE : Les devis ne sont PAS mis en cache (trop volumineux)
+           Ils sont toujours recharges depuis l'API meme si cache actif
+
+--- FONCTIONS CRUD EXPOSEES ---
+  addAnalyse, updateAnalyse, deleteAnalyse
+  addIPM, updateIPM, deleteIPM, activateIPM, deactivateIPM
+  addAssurance, updateAssurance, deleteAssurance, activateAssurance, deactivateAssurance
+  addTarif, updateTarif, deleteTarif
+  addPatient, updatePatient, deletePatient
+  addDevis, updateDevis, deleteDevis, updateDevisPaiement
+  reloadCategories, activateCategorie, deactivateCategorie
+
+--- FONCTIONS UTILITAIRES ---
+  getPrixAnalyse(analyseId, ipmId, assuranceId) :
+    1. Cherche tarif avec typePriseEnCharge correspondant (IPM ou ASSURANCE)
+    2. Si pas trouve : cherche avec ipmId/assuranceId specifique (ancien systeme)
+    3. Retourne le prix ou 0
+
+  getDevisMensuels(mois, typePriseEnCharge, ipmId, assuranceId) :
+    Filtre les devis du DataContext par mois + typePriseEnCharge + entite
+
+--- LISTES STANDARD HARDCODEES ---
+  analysesStandard : 150+ analyses medicales communes
+    (NFS, VS, Glycemie, Creatinine, Cholesterol, VIH, Echographies, etc.)
+
+  assurancesStandard : 10 compagnies d'assurance
+    ASCOMA, SANLAM, SONAM, PA, SUNU, AMSA, NSIA, WAFA, OLEA, WILLIS TOWERS WATSON
+
+  ipmsStandard : 32 IPM
+    C2K STAFFING, CREDIT MUTUEL, FUTUR MEDIA, HYDROCARBURE, LABOREX, MIMRAN,
+    TRANSVIE, MBARUM KOOLUTE, MUTUEL HOTELIERE, ODEC DE DAKAR, POSTE,
+    PROFESSIONS LIBERALES, SAGAM, FILFILI, EIFFAGE, SANTE PLUS, SEN EAU,
+    SENELEC, SFD, SOCOCIM, RIDWAN, SOMICOA, SONATEL, SORES, SYPOA,
+    TOP INTER, TRANSIT, TRANSPORT AERIEN, WER GI YARAM, DIPROM, ZI SENTENAC
+
+  ipmTarifsStandard : Tarifs avec prix reels pour l'import IPM
+    Ex : NFS = 8800 FCFA, Glycemie = 2200 FCFA, etc.
+
+  assuranceTarifsStandard : Tarifs avec prix=0 pour l'import Assurance
+
+
+================================================================================
+11. ROUTAGE FRONTEND (App.js)
+================================================================================
+
+Toutes les routes utilisent HashRouter (URLs avec #).
+
+Route publique :
+  /login                    -> Login.js (aucune protection)
+  /                         -> Redirige vers /login
+
+Routes protegees (ProtectedRoute + Layout) :
+  /dashboard                -> Dashboard.js
+  /categories               -> CategoriesManagement.js (admin uniquement)
+
+  /base-de-donnees/:category           -> AnalysesList.js (dynamique)
+  /base-de-donnees/:category/ajouter   -> AnalysesForm.js
+  /base-de-donnees/:category/:id/modifier -> AnalysesForm.js
+
+  Routes de compatibilite (redirigent vers base-de-donnees) :
+  /analyses, /analyses/ajouter, /analyses/:id/modifier
+  /base-de-donnees/radiographie (+ ajouter + :id/modifier)
+  /base-de-donnees/hospitalisation (+ ajouter + :id/modifier)
+  /base-de-donnees/maternite (+ ajouter + :id/modifier)
+  /base-de-donnees/consultations (+ ajouter + :id/modifier)
+  /base-de-donnees/medicament (+ ajouter + :id/modifier)
+
+  /ipm                      -> IPMList.js
+  /ipm/ajouter              -> IPMForm.js
+  /ipm/:id/modifier         -> IPMForm.js
+  /ipm/:id/tarifs           -> IPMTarifs.js
+
+  /assurances               -> AssurancesList.js
+  /assurances/ajouter       -> AssurancesForm.js
+  /assurances/:id/modifier  -> AssurancesForm.js
+  /assurances/:id/tarifs    -> AssurancesTarifs.js
+
+  /patients                 -> PatientsList.js
+  /patients/ajouter         -> PatientsForm.js
+  /patients/:id/modifier    -> PatientsForm.js
+
+  /historique               -> Historique.js
+
+  /devis                    -> DevisList.js (landing + redirect vers historique)
+  /devis/creer              -> DevisForm.js
+  /devis/mensuel            -> DevisMensuel.js
+  /devis/proforma           -> DevisProformaList.js
+  /devis/proforma/creer     -> DevisProformaForm.js
+  /devis/proforma/:id/modifier -> DevisProformaForm.js
+  /devis/:id                -> DevisDetail.js
+  /devis/:id/modifier       -> DevisForm.js
+
+  /categories               -> CategoriesManagement.js
+  /statistiques             -> Statistiques.js (admin uniquement)
+  /detail-prestation        -> DetailPrestation.js (ProtectedRoute adminOnly=true)
+  /*                        -> Redirige vers /dashboard
+
+ProtectedRoute (frontend/src/components/ProtectedRoute.js) :
+  Props : children, adminOnly (default: false)
+  - Pendant loading : spinner centre
+  - Si non authentifie : Navigate vers /login
+  - Si adminOnly=true ET pas superuser : Navigate vers /dashboard
+
+
+================================================================================
+12. NAVIGATION SIDEBAR (Layout.js)
+================================================================================
+
+Logo : /logo-facturation.png + "Clinique"
+
+--- PRINCIPAL ---
+  Dashboard (bi-speedometer2) -> /dashboard
+
+--- SECTION : GESTION ---
+  Categories (bi-tags) -> /categories [Admin seulement]
+  Base de donnees (bi-database) [Dropdown collapsible] :
+    - Auto-ouvert si route /base-de-donnees/* ou /analyses active
+    - Sous-liens dynamiques depuis DataContext.categories :
+        analyses       -> bi-clipboard-pulse
+        radiographie   -> bi-camera
+        hospitalisation -> bi-hospital
+        maternite      -> bi-heart-pulse
+        consultations  -> bi-person-check
+        medicament     -> bi-capsule
+        autres         -> bi-tag
+    - Fallback statique si categories vide
+  IPM (bi-building) -> /ipm
+  Assurances (bi-shield-check) -> /assurances
+  Patients (bi-people) -> /patients
+
+--- SECTION : FACTURATION ---
+  Devis (bi-file-earmark-text) -> /devis
+  Historique (bi-clock-history) -> /historique
+  Demande Devis (bi-file-earmark-plus) -> /devis/proforma
+  Factures Mensuelles (bi-calendar-month) -> /devis/mensuel
+  Detail de prestation (bi-calendar-check) -> /detail-prestation [Admin seulement]
+  Statistiques (bi-bar-chart) -> /statistiques [Admin seulement]
+
+--- PIED DE SIDEBAR ---
+  Icone bi-person-circle + username + role (Super Admin / Manager)
+  Bouton Deconnexion (bi-box-arrow-right)
+
+
+================================================================================
+13. PAGES FRONTEND — DETAIL COMPLET
+================================================================================
+
+================================================================================
+PAGE : Login (/login)
+================================================================================
+Fichier : frontend/src/pages/Login.js
+Acces : Public (non authentifie)
+Auto-redirect vers /dashboard si deja authentifie
+
+Contenu affiche :
+  - Logo /NABY.jpg ou logo par defaut
+  - Titre : "CLINIQUE SOPE NABY"
+  - Champ username (type: text, placeholder: Nom d'utilisateur)
+  - Champ password (type: password, placeholder: Mot de passe)
+  - Message d'erreur si echec
+  - Credits en bas : "MBN" et "ODM"
+
+Actions :
+  - Bouton "Se connecter" (spinner pendant chargement)
+
+Flux :
+  POST /api/auth/login/ -> {username, password}
+  Reponse: {access, refresh, user} -> localStorage -> redirect /dashboard
+  Rate limiting: 5 tentatives / 5min, blocage 15min
+
+================================================================================
+PAGE : Dashboard (/dashboard)
+================================================================================
+Fichier : frontend/src/pages/Dashboard.js
+Acces : Tous utilisateurs authentifies
+
+Statistiques (depuis GET /api/dashboard-stats/) :
+  - Total Analyses (badge bleu)
+  - Total IPM
+  - Total Assurances
+  - Total Patients
+  - Total Devis (avec nombre ce mois)
+  - Montant total du mois [visible admin seulement]
+  - Devis aujourd'hui (nombre)
+  - Montant du jour
+
+Actions rapides :
+  - "Creer un devis" -> /devis/creer
+  - "Facture mensuelle" -> /devis/mensuel
+  - "Ajouter un patient" -> /patients/ajouter
+
+================================================================================
+PAGE : Gestion des Categories (/categories)
+================================================================================
+Fichier : frontend/src/pages/CategoriesManagement.js
+Acces : Super Admin SEULEMENT (redirection si non admin)
+
+Formulaire de creation :
+  - Champ "Nom de la categorie" (texte, requis, minuscules, sans espaces)
+  - Bouton "Creer la categorie" (spinner pendant loading)
+  - Messages succes/erreur
+
+Liste des categories existantes (grille 3 colonnes) :
+  Pour chaque categorie :
+    - Nom de la categorie
+    - Badge Actif (vert) / Inactif (rouge)
+    - Statut en texte
+    - Bouton "Modifier" :
+        -> Ouvre un input inline pour renommer
+        -> Boutons Enregistrer / Annuler
+    - Bouton "Supprimer" :
+        -> Confirmation avec avertissement
+        -> Echoue si analyses utilisees dans des devis
+    - Bouton "Desactiver" (si actif) ou "Activer" (si inactif)
+
+Flux :
+  Creer    -> POST /api/categories/ -> recharge DataContext
+  Renommer -> PUT /api/categories/{nom}/ -> met a jour toutes les Analyses liees
+  Supprimer -> DELETE /api/categories/{nom}/ -> echoue si Analyses dans DevisLigne
+  Activer  -> POST /api/categories/{nom}/activate
+  Desactiver -> POST /api/categories/{nom}/deactivate
+
+================================================================================
+PAGE : Liste des Analyses (/base-de-donnees/:category)
+================================================================================
+Fichier : frontend/src/pages/AnalysesList.js
+Acces : Tous utilisateurs authentifies
+
+En-tete :
+  - Titre de la categorie avec badge
+  - Bouton "Ajouter" -> /base-de-donnees/:category/ajouter
+  - Compteur "X analyse(s) trouvee(s)"
+
+Filtres :
+  - Barre de recherche texte avec bouton reinitialisation (X)
+
+Table :
+  - Nom : nom de l'analyse
+  - Date de creation : format fr-FR
+  - Actions : Modifier (lien), Supprimer (bouton + confirm)
+
+Flux :
+  Modifier -> /base-de-donnees/:category/:id/modifier
+  Supprimer -> DELETE /api/analyses/{id}/ avec confirmation
+
+================================================================================
+PAGE : Formulaire Analyse (/base-de-donnees/:category/ajouter ou /:id/modifier)
+================================================================================
+Fichier : frontend/src/pages/AnalysesForm.js
+Acces : Tous utilisateurs authentifies
+
+Mode Creation :
+  - Nom (texte, requis)
+  - Categorie (badge info, non modifiable)
+  - Type de prise en charge (select: IPM / ASSURANCE, optionnel)
+  - Si IPM : select de l'IPM
+  - Si ASSURANCE : select de l'Assurance
+  - Prix (nombre, optionnel)
+
+Mode Modification :
+  - Nom uniquement (pas de section tarification)
+  - Categorie affichee en badge
+
+Actions :
+  - Enregistrer -> POST /api/analyses/ ou PUT /api/analyses/{id}/
+  - Si prix fourni en creation -> POST /api/tarifs/ pour creer le tarif
+  - Annuler -> retour a la liste
+
+================================================================================
+PAGE : Liste IPM (/ipm)
+================================================================================
+Fichier : frontend/src/pages/IPMList.js
+Acces : Tous utilisateurs authentifies
+
+En-tete :
+  - Bouton "Ajouter une IPM" -> /ipm/ajouter
+
+Filtres :
+  - Barre de recherche texte
+
+Table :
+  - Nom : nom de l'IPM
+  - Date creation : format fr-FR
+  - Actions :
+      Tarifs -> /ipm/:id/tarifs
+      Modifier -> /ipm/:id/modifier
+      Supprimer -> DELETE /api/ipms/{id}/ avec confirmation
+
+================================================================================
+PAGE : Formulaire IPM (/ipm/ajouter ou /ipm/:id/modifier)
+================================================================================
+Fichier : frontend/src/pages/IPMForm.js
+Acces : Tous utilisateurs authentifies
+
+Champs :
+  - Nom de l'IPM (texte, requis)
+
+Actions :
+  - Enregistrer -> POST /api/ipms/ ou PUT /api/ipms/{id}/
+  - Annuler -> retour a /ipm
+
+================================================================================
+PAGE : Tarifs IPM (/ipm/:id/tarifs)
+================================================================================
+Fichier : frontend/src/pages/IPMTarifs.js
+Acces : Tous utilisateurs authentifies
+
+IMPORTANT : Les tarifs affiches/modifies sont GENERIQUES (type_prise_en_charge='IPM')
+            Ils s'appliquent a TOUTES les IPM, pas seulement celle selectionnee.
+
+Filtres :
+  - Recherche texte (filtre par nom d'analyse)
+  - filterType : Toutes / Avec prix / Sans prix
+  - filterCategorie : Tout / analyses / radiographie / hospitalisation / maternite / consultations / medicament
+
+Formulaire ajout manuel :
+  - Categorie (select)
+  - Analyse (select, filtre par categorie)
+  - Prix (nombre)
+  - Bouton "Ajouter" -> POST /api/tarifs/ avec type_prise_en_charge='IPM'
+
+Table (toutes les analyses) :
+  - Analyse : badge categorie + nom
+  - Prix : badge vert si > 0, gris si pas de prix
+  - Actions :
+      Si prix : Modifier (prompt()) + Supprimer
+      Si pas de prix : Ajouter prix (prompt())
+
+Statistiques :
+  - Badge "X / Y analyses avec prix"
+
+Bouton import :
+  - "Importer les prix standard" -> importe ipmTarifsStandard hardcode (150+ analyses)
+
+Flux :
+  GET /api/analyses/ + GET /api/tarifs/ -> jointure cote client
+  POST/PUT/DELETE /api/tarifs/ pour CRUD
+
+================================================================================
+PAGE : Liste Assurances (/assurances)
+================================================================================
+Fichier : frontend/src/pages/AssurancesList.js
+Acces : Tous utilisateurs authentifies
+Structure identique a IPMList avec :
+  - Bouton "Ajouter une assurance"
+  - Table : Nom, Date creation, Actions (Tarifs, Modifier, Supprimer)
+
+================================================================================
+PAGE : Formulaire Assurance (/assurances/ajouter ou /:id/modifier)
+================================================================================
+Fichier : frontend/src/pages/AssurancesForm.js
+Structure identique a IPMForm
+Champ : Nom de l'assurance
+
+================================================================================
+PAGE : Tarifs Assurance (/assurances/:id/tarifs)
+================================================================================
+Fichier : frontend/src/pages/AssurancesTarifs.js
+Structure identique a IPMTarifs mais pour type_prise_en_charge='ASSURANCE'
+Difference : assuranceTarifsStandard a TOUS les prix a 0
+
+================================================================================
+PAGE : Liste Patients (/patients)
+================================================================================
+Fichier : frontend/src/pages/PatientsList.js
+Acces : Tous utilisateurs authentifies
+
+En-tete :
+  - Titre "Patients" avec compteur total
+  - Bouton "Ajouter un patient" -> /patients/ajouter
+
+Filtres :
+  - Barre de recherche (nom complet ou matricule) avec debounce 300ms
+
+Table :
+  - Nom complet
+  - Matricule
+  - Type prise en charge : badge IPM / ASSURANCE
+  - IPM / Assurance : nom de l'entite liee
+  - Actions : Modifier, Supprimer
+
+Flux :
+  Modifier -> /patients/:id/modifier
+  Supprimer -> DELETE /api/patients/{id}/ avec confirmation
+
+================================================================================
+PAGE : Formulaire Patient (/patients/ajouter ou /patients/:id/modifier)
+================================================================================
+Fichier : frontend/src/pages/PatientsForm.js
+Acces : Tous utilisateurs authentifies
+
+Champs :
+  - Nom complet (texte, requis)
+  - Matricule (texte, requis)
+  - Type de prise en charge (select: IPM / ASSURANCE, requis)
+  - Si IPM : select IPM (requis, liste des IPM actives)
+  - Si ASSURANCE : select Assurance (requis, liste des assurances actives)
+
+Actions :
+  - Enregistrer -> POST /api/patients/ ou PUT /api/patients/{id}/
+  - Annuler -> retour a /patients
+
+================================================================================
+PAGE : Devis — Landing (/devis)
+================================================================================
+Fichier : frontend/src/pages/DevisList.js
+Acces : Tous utilisateurs authentifies
+
+Contenu :
+  - Bouton "Creer un devis" -> /devis/creer
+  - Message : "Les devis sont dans l'Historique"
+  - Bouton "Voir l'Historique des devis" -> /historique
+
+(Note : Avant refactoring, cette page contenait la liste complete des devis
+ avec pagination client-side 25 par page et recherche)
+
+================================================================================
+PAGE : Historique des Devis (/historique)
+================================================================================
+Fichier : frontend/src/pages/Historique.js
+Acces : Tous utilisateurs authentifies (admin + manager)
+
+En-tete :
+  - Titre "Historique des Devis"
+  - Bouton "Creer un devis" -> /devis/creer
+  - Compteur total de devis
+
+Recherche :
+  - Barre de recherche avec debounce 400ms
+  - Recherche SERVEUR par : nom patient, matricule, numero de devis
+  - Reset a la page 1 a chaque nouvelle recherche
+
+Table :
+  - N° : #numero du devis
+  - Patient : Nom + matricule (ou "Patient supprime")
+  - Date : format fr-FR
+  - Total (FCFA) : badge vert
+  - Statut : badge
+      Non regle -> badge-danger (rouge)
+      Partiel   -> badge-warning (orange)
+      Regle     -> badge-success (vert)
+  - Actions :
+      Voir -> /devis/:id
+      Modifier -> /devis/:id/modifier
+      Supprimer [Admin seulement] -> DELETE avec confirmation
+
+Pagination :
+  - PAGE_SIZE = 15 devis par page
+  - Pagination SERVEUR (pas client)
+  - Boutons Precedent / Suivant
+  - Numeros de pages avec fenetre +/-2 autour de la page courante
+  - Ellipses (...) pour les trous
+  - Indicateur : "Page X / Y - Z devis"
+  - Supporte 2500+ devis sans probleme de performance
+
+Flux :
+  GET /api/devis/?page=X&page_size=15&search=...&ordering=-date_creation&is_proforma=False
+
+================================================================================
+PAGE : Formulaire Devis (/devis/creer ou /devis/:id/modifier)
+================================================================================
+Fichier : frontend/src/pages/DevisForm.js
+Acces : Tous utilisateurs authentifies
+
+--- Section 1 : Informations du patient ---
+  - Nom complet (texte, requis)
+  - Matricule (texte, requis)
+  - Type de prise en charge (select: IPM / ASSURANCE, requis)
+  - Si IPM : select IPM
+  - Si ASSURANCE : select Assurance
+  - Souscripteur (texte, optionnel)
+
+Comportement patient :
+  Si patient trouve par (matricule + nomComplet) :
+    -> Reutilise le patient existant
+    -> Si son IPM/Assurance a change : PUT /api/patients/{id}/
+  Sinon :
+    -> POST /api/patients/ pour creer un nouveau patient
+
+--- Section 2 : Selection des analyses ---
+  - Barre de recherche d'analyse (texte)
+  - Filtre par categorie (select)
+  - Compteur : "X analyse(s) disponible(s) dans la categorie Y"
+  - Cartes d'analyses cliquables :
+      Badge categorie + Nom analyse + Badge prix
+      Flash vert 2 secondes + icone check lors de l'ajout
+
+--- Section 3 : Lignes du devis ---
+Table :
+  - # : numero de ligne
+  - Analyse / Categorie : badge categorie + nom (flash vert si vient d'etre ajoute)
+  - Quantite : input number (min=1, step=1)
+  - Prix unitaire (FCFA) : input number (min=0, step=0.01)
+  - Sous-total (FCFA) : prix x quantite
+  - Actions : bouton Supprimer
+
+Pied du tableau : TOTAL (badge bleu) = somme de tous les sous-totaux
+
+--- Section 4 : Part patients ---
+(Si des lignes sont presentes)
+  - Select "Part patients" : 0% a 50% par pas de 5%
+  - Recapitulatif :
+      Total du devis
+      Part patients %
+      Montant a payer = Total x (tauxCouverture / 100)
+      Montant couvert = Total - Montant a payer
+
+Actions :
+  - Creer/Modifier -> POST /api/devis/ ou PUT /api/devis/{id}/
+  - Annuler
+
+================================================================================
+PAGE : Detail d'un Devis (/devis/:id)
+================================================================================
+Fichier : frontend/src/pages/DevisDetail.js
+Acces : Tous utilisateurs authentifies
+
+Chargement : GET /api/devis/{id}/ au montage
+
+Format facture imprimable :
+  En-tete gauche : Logo /NABY.jpg + CLINIQUE SOPE NABY + telephone + email
+  En-tete droite : FACTURE N° + date
+  Watermark diagonal "PROFORMA" rouge translucide si is_proforma=true
+
+Informations patient :
+  - Nom complet
+  - Souscripteur (si present)
+  - Matricule
+  - Type de prise en charge + nom entite (IPM/Assurance)
+
+Tableau des prestations groupe par categorie :
+  - En-tete bleu : #, Categorie, Prix (FCFA)
+  - Separateurs noirs epais entre categories
+  - Fond gris pour noms de categories
+  - Chaque ligne : numero, nom analyse (+ "x{quantite}" si > 1), sous-total
+  - Pied : TOTAL, Part patients %, Montant a payer, Montant couvert
+
+Signature : "La comptabilite" centre en bas
+
+Boutons d'action (non imprimes) :
+  - Imprimer -> window.print()
+  - PDF -> generatePDFDevis()
+  - Modifier -> /devis/:id/modifier
+  - Retour
+
+================================================================================
+PAGE : Devis Proforma — Liste (/devis/proforma)
+================================================================================
+Fichier : frontend/src/pages/DevisProformaList.js
+Acces : Tous utilisateurs authentifies
+
+NOTE : Utilise fetch natif avec URL hardcodee en production :
+       https://facturation.cliniquenaby.com/api/devis/proforma/
+
+En-tete :
+  - Titre "Demandes Devis (Proforma)"
+  - Bouton "Nouvelle Demande" -> /devis/proforma/creer
+
+Filtres :
+  - Barre de recherche (patient, matricule, numero de devis)
+
+Table :
+  - N° : #PROFORMA-{numero}
+  - Patient : Nom + matricule
+  - Date : format fr-FR
+  - Total (FCFA) : badge vert
+  - Statut : badge rouge (non regle) / vert (regle)
+  - Actions :
+      Voir -> /devis/:id
+      Modifier -> /devis/proforma/:id/modifier
+      Supprimer [Admin seulement] -> confirm -> deleteDevis() -> recharge liste
+
+================================================================================
+PAGE : Formulaire Devis Proforma (/devis/proforma/creer ou /:id/modifier)
+================================================================================
+Fichier : frontend/src/pages/DevisProformaForm.js
+Acces : Tous utilisateurs authentifies
+
+Identique a DevisForm SAUF :
+  - is_proforma=true envoye a l'API
+  - Retour vers /devis/proforma apres soumission
+
+Champs identiques a DevisForm :
+  - Nom complet (requis)
+  - Matricule (requis)
+  - Type de prise en charge (requis)
+  - IPM ou Assurance (requis selon type)
+  - Souscripteur (optionnel)
+  - Selection analyses (cartes cliquables avec badge + prix)
+  - Tableau des lignes avec # / Analyse / Quantite / Prix unitaire / Sous-total / Supprimer
+  - Part patients (select 0-50%)
+  - Recapitulatif : Total, Part patients %, Montant a payer, Montant couvert
+
+Calcul montant :
+  montantAPayer = total x (tauxCouvertureNum / 100)
+  montantCouvert = total - montantAPayer
+
+================================================================================
+PAGE : Factures Mensuelles (/devis/mensuel)
+================================================================================
+Fichier : frontend/src/pages/DevisMensuel.js
+Acces : Tous utilisateurs authentifies
+
+Etape 1 — Formulaire de recherche :
+  - Mois (input month, requis)
+  - Type de prise en charge (select: IPM / ASSURANCE, requis)
+  - Si IPM : select IPM
+  - Si ASSURANCE : select Assurance
+  - Bouton "Rechercher"
+
+Etape 2 — Resultats :
+  N° Facture genere via :
+    GET /api/factures-mensuelles/numero/?mois=&annee=&typePriseEnCharge=&entiteId=
+    Format : FACT-YYYY-MM-XXX
+
+  Affichage N° de facture en gros
+
+  Table des devis du mois :
+    - PARTICIPANT : nom du souscripteur ou nom patient
+    - MATRICULE : matricule du patient
+    - PATIENTS : nom du patient
+    - MONTANT : montantCouvert = total x (1 - tauxCouverture/100) en FCFA
+  - Ligne TOTAL en bas
+
+Actions :
+  - Imprimer -> window.print()
+  - PDF -> generatePDFDevisMensuel()
+  - Nouvelle recherche -> retour etape 1
+
+Flux :
+  - getDevisMensuels() -> filtre local DataContext par mois + typePriseEnCharge + entiteId
+  - facturesMensuellesAPI.genererNumero() -> GET /api/factures-mensuelles/numero/
+
+================================================================================
+PAGE : Statistiques (/statistiques)
+================================================================================
+Fichier : frontend/src/pages/Statistiques.js
+Acces : Super Admin SEULEMENT (affiche "Acces refuse" si non admin)
+
+Section Filtres :
+  - Type de periode (select: Par mois / Par annee)
+  - Valeur de la periode :
+      Si mois : input type="month"
+      Si annee : input number (2000-2100)
+
+Section Totaux generaux (3 cartes) :
+  - Total IPM (montant couvert sur la periode)
+  - Total Assurances
+  - Total General (IPM + Assurances)
+  - Periode affichee : nom mois+annee ou "Annee YYYY"
+
+Calcul :
+  calculerMontantCouvert(devi) = devi.total x (1 - tauxCouverture/100)
+  Filtre par annee+mois ou annee seulement
+  Groupement par IPM/Assurance depuis patients.ipmId ou patients.assuranceId
+
+Section Detail par IPM (table) :
+  - IPM : nom
+  - Montant (FCFA) : montantCouvert, trie decroissant
+  - TOTAL IPM en pied
+
+Section Detail par Assurance (meme structure)
+
+Section Suivi des Factures :
+  -> Composant SuiviFactures (voir ci-dessous)
+
+================================================================================
+COMPOSANT : SuiviFactures
+================================================================================
+Fichier : frontend/src/components/SuiviFactures.js
+Utilise dans : Statistiques.js
+Acces : Super Admin seulement (herite)
+
+Filtres :
+  - Mois (select 1-12)
+  - Annee (input number)
+
+4 cartes statistiques :
+  - Non regles (rouge) — count
+  - Partiellement regles (orange) — count
+  - Regles (vert) — count
+  - Montant total (bleu)
+
+Table des factures :
+  - Numero facture
+  - IPM/Assurance
+  - Montant couvert : formate fr-FR en FCFA
+  - Statut de paiement : select modifiable
+      Non regle / Partiellement regle / Regle
+  - Date de paiement : input date modifiable
+  - Commentaire : input texte modifiable
+  Lignes modifiees : fond jaune
+
+Boutons :
+  - "Enregistrer les modifications" [visible si modifications en attente]
+      -> PATCH /api/devis/{id}/update_paiement/ pour chaque devis_id de chaque facture modifiee
+  - "Telecharger PDF" -> generatePDFListeFactures()
+
+Flux :
+  GET /api/statistiques/paiement/?mois=X&annee=Y
+  -> {statistiques, factures: [{id, numeroFacture, entiteNom, montantCouvert,
+      statutPaiement, datePaiement, commentairePaiement, devis_ids}]}
+  PATCH /api/devis/{id}/update_paiement/
+  -> {statutPaiement, datePaiement, commentairePaiement}
+
+================================================================================
+PAGE : Detail de Prestation (/detail-prestation)
+================================================================================
+Fichier : frontend/src/pages/DetailPrestation.js
+Acces : Super Admin SEULEMENT (ProtectedRoute adminOnly=true + redirect /dashboard)
+
+Section Filtres :
+  - Date de debut (input date)
+  - Date de fin (input date)
+  - Bouton "Rechercher" (avec spinner)
+  Note : Detecte automatiquement la plage des dates dans les devis au montage
+
+Traitement cote client (depuis DataContext) :
+  - Filtre les devis dans la periode
+  - Pour chaque ligne de chaque devis :
+      Extrait : service (nom), categorie, prix unitaire, quantite
+      Exclut les lignes avec prix invalide (0, NaN, negatif)
+  - Groupe par nom de service -> par date -> compte patients uniques + prestations + prix
+  - Groupe par date -> par patient -> liste des prestations avec prix
+
+Section Resume global (3 cartes) :
+  - Patients avec prestations (count unique)
+  - Total Prestations (count lignes valides)
+  - Prix Total (FCFA)
+
+Section Detail par service et par jour :
+  Pour chaque service (nom d'analyse unique) :
+    En-tete bleu : nom du service + badge categorie + badge "Prix unitaire: X FCFA"
+    Table :
+      - Date
+      - Nombre de patients (badge bleu)
+      - Nombre de prestations (badge vert)
+      - Prix total
+    Pied : TOTAL pour ce service
+
+Section Resume global (repete en bas)
+
+Section Details consultations par patient et par jour :
+  Filtre par mois (select des mois disponibles, plus recent en premier)
+  Pour chaque jour avec prestations :
+    En-tete : date + badge nombre de patients
+    Table :
+      - Patient (nom en bleu)
+      - Matricule (badge gris)
+      - Services (liste detaillee) :
+          badge categorie (orange) + badge "Service" (bleu) + nom service + prix x quantite
+      - Prix total du jour
+    Pied : TOTAL pour ce jour
+
+Categories supportees :
+  ANESTHESISTE, BLOC OPERATOIRE, Dermatologie, Diabetologie, GASTROLOGIE,
+  Gynecologie, Infirmerie, ORL, Ophtalmologie, Pneumologie, PEDIATRIE, Urologie,
+  Analyses, Hospitalisation, Maternite, Medicament, Radiographie
+
+
+================================================================================
+14. FLUX DE DONNEES COMPLETS
+================================================================================
+
+--- Flux : Creer un Devis ---
+1. Utilisateur remplit DevisForm (patient + analyses + taux)
+2. Frontend cherche patient par matricule+nom dans le state :
+   - Si trouve ET donnees changees : PUT /api/patients/{id}/
+   - Si non trouve : POST /api/patients/
+3. Frontend : POST /api/devis/ avec :
+   {patientId, lignes:[{analyseId, prix, quantite}], souscripteur, tauxCouverture, isProforma}
+4. Backend DevisCreateSerializer.create() :
+   - Cherche dernier devis 2026-XXXXX -> incremente
+   - Genere numero : {annee}-{seq:05d}
+   - Calcule total = somme(prix x quantite)
+   - Cree le Devis
+   - Pour chaque ligne : cherche Analyse par analyseId -> cree DevisLigne
+5. Frontend recoit le devis cree -> navigue vers /devis/:id
+
+--- Flux : Facture Mensuelle ---
+1. Utilisateur selectionne mois + type + entite dans DevisMensuel
+2. Frontend : getDevisMensuels(mois, typePriseEnCharge, ipmId/assuranceId)
+   -> filtre les devis du DataContext par month+year + type patient + entite
+3. Frontend : GET /api/factures-mensuelles/numero/?mois=&annee=&typePriseEnCharge=&entiteId=
+   -> recoit FACT-YYYY-MM-XXX
+4. Affiche tableau recapitulatif avec montantCouvert par devis
+5. Bouton PDF -> generatePDFDevisMensuel()
+
+--- Flux : Suivi des Paiements ---
+1. SuiviFactures monte -> GET /api/statistiques/paiement/?mois=&annee=
+2. Backend groupe les devis par entite (IPM ou Assurance)
+   - Calcule montantCouvert = sum(total x (1 - tauxCouverture/100))
+   - Retourne {statistiques, factures}
+3. Utilisateur modifie statut/date/commentaire dans la table
+4. Bouton "Enregistrer" ->
+   PATCH /api/devis/{id}/update_paiement/ pour chaque devisId de chaque facture modifiee
+
+--- Flux : Tarification ---
+1. Tarifs stockes avec type_prise_en_charge='IPM' (partages pour toutes les IPM)
+   ou type_prise_en_charge='ASSURANCE'
+2. getPrixAnalyse(analyseId, ipmId, assuranceId) dans DataContext :
+   a. Cherche tarif avec typePriseEnCharge correspondant (IPM si ipmId, ASSURANCE si assuranceId)
+   b. Si pas trouve : cherche avec ipmId/assuranceId specifique (ancien systeme)
+   c. Retourne le prix ou 0
+
+--- Flux : Cache Frontend ---
+1. Premier chargement : charge tout depuis l'API, stocke dans localStorage
+2. Chargements suivants (< 1h) :
+   - Charge analyses, ipms, assurances, tarifs, patients, categories depuis le cache
+   - Recharge toujours les devis depuis l'API (non mis en cache)
+3. Cache expire ou invalide : recharge tout depuis l'API
+
+--- Flux : Historique (pagination serveur) ---
+1. Utilisateur ouvre /historique
+2. GET /api/devis/?page=1&page_size=15&ordering=-date_creation&is_proforma=False
+3. Reponse : {count: total, results: [15 devis]}
+4. Affiche les 15 devis + pagination
+5. Navigation de page : nouvelle requete avec page=N
+6. Recherche : nouvelle requete avec search=terme (reset page=1)
+   Recherche dans : patient.nom_complet, patient.matricule, devis.numero
+
+
+================================================================================
+15. INFORMATIONS ADDITIONNELLES
+================================================================================
+
+--- Numerotation ---
+  Devis : {annee}-{seq:05d}
+    Annee hardcodee a 2026 dans DevisCreateSerializer
+    Exemple : 2026-00001, 2026-00042
+
+  Facture mensuelle : FACT-{YYYY}-{MM}-{hash}
+    Generee cote serveur par generer_numero_facture_mensuelle_view
+
+--- Images / Assets ---
+  Logo PDF : /NABY.jpg
+  Logo sidebar : /logo-facturation.png
+
+--- Format des montants ---
+  Affichage ecran : Intl.NumberFormat('fr-FR') ou .toLocaleString('fr-FR')
+  Dans les PDF : Math.round() sans separateurs (pour compatibilite jsPDF)
+
+--- Ordre des categories dans les PDF ---
+  analyses, radiographie, hospitalisation, maternite, consultations, medicament, non-categorise
+
+--- Settings backend cles ---
+  DEBUG : depuis env (defaut True)
+  SECRET_KEY : depuis env (requis en prod)
+  LANGUAGE_CODE : fr-fr
+  TIME_ZONE : UTC
+  SIMPLE_JWT access lifetime : 24 heures
+  SIMPLE_JWT refresh lifetime : 7 jours
+  ROTATE_REFRESH_TOKENS : True
+  BLACKLIST_AFTER_ROTATION : True
+  CORS_ALLOW_CREDENTIALS : True
+  CORS_ALLOWED_ORIGINS : localhost:3000 + facturation.cliniquenaby.com
+  Default permission : IsAuthenticated
+  Default auth : JWTAuthentication + SessionAuthentication
+  Pagination : LargePageNumberPagination (page_size=5000, max=1000000)
+  Logging : security.log + console
+  Max request size : 10MB (InputValidationMiddleware)
+
+INSTALLED_APPS :
+  django.contrib.admin, django.contrib.auth, django.contrib.contenttypes,
+  django.contrib.sessions, django.contrib.messages, django.contrib.staticfiles,
+  rest_framework, rest_framework_simplejwt, rest_framework_simplejwt.token_blacklist,
+  corsheaders, api
+
+MIDDLEWARE ORDER :
+  InputValidationMiddleware, DisableCSRFForAuth, SecurityHeadersMiddleware
+  (ajoutes aux middleware Django standards)
+
+--- Problemes connus / Notes ---
+  1. URL hardcodee dans DevisProformaList.js :
+     https://facturation.cliniquenaby.com/api/devis/proforma/
+     -> A remplacer par api.get('/devis/proforma/') pour la portabilite
+
+  2. Nombreux console.log de debogage dans DetailPrestation.js (present en production)
+
+  3. L'annee du numero de devis (2026) est hardcodee dans DevisCreateSerializer.create()
+     -> A parametriser pour les annees futures
+
+  4. Les tarifs sont GENERIQUES (partages entre toutes les IPM ou toutes les Assurances)
+     -> Un seul set de tarifs pour toutes les IPM
+
+  5. DevisMensuel utilise le filtrage client-side depuis DataContext
+     -> Limite si les devis ne sont pas tous charges en memoire
+
+  6. SuiviFacturesSimple.js est un composant de test statique sans fonctionnalite reelle
+
+
+================================================================================
+FIN DE LA DOCUMENTATION
+================================================================================
