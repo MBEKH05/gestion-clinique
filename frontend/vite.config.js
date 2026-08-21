@@ -27,10 +27,19 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallbackDenylist: [/^\/api\//],
+        // /storage/ sert les fichiers (PDF/images) des dossiers labo -- sans
+        // cette exclusion, le service worker intercepte ces requetes comme
+        // une navigation SPA et renvoie index.html au lieu du fichier reel
+        // (symptome : apercu/impression/lien direct affichent l'app au lieu
+        // du PDF).
+        navigateFallbackDenylist: [/^\/api\//, /^\/storage\//],
         runtimeCaching: [
           {
             urlPattern: /\/api\//,
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: /\/storage\//,
             handler: 'NetworkOnly',
           },
         ],
