@@ -33,28 +33,17 @@ services:
     container_name: clinique_nginx
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "7777:7777"
-      - "7778:7778"
-      - "7779:7779"
+      - "127.0.0.1:7777:7777"
+      - "127.0.0.1:7778:7778"
+      - "127.0.0.1:7779:7779"
     volumes:
       - ./docker/nginx/${NGINX_CONF:-nginx.http.conf}:/etc/nginx/nginx.conf:ro
       - ./frontend/dist:/usr/share/nginx/html:ro
       - ./backend:/var/www/html:ro
-      - certbot_www:/var/www/certbot:ro
-      - certbot_conf:/etc/letsencrypt:ro
     depends_on:
       - app
     networks: [internal]
 
-  certbot:
-    image: certbot/certbot
-    container_name: clinique_certbot
-    volumes:
-      - certbot_www:/var/www/certbot
-      - certbot_conf:/etc/letsencrypt
-    entrypoint: >
-      /bin/sh -c "trap exit TERM; while :; do sleep 12h & wait $${!}; certbot renew --webroot -w /var/www/certbot; done"
 
   db:
     image: mariadb:11
@@ -82,8 +71,6 @@ services:
 
 volumes:
   db_data:
-  certbot_www:
-  certbot_conf:
   frontend_node_modules:
 
 networks:
