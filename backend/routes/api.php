@@ -58,8 +58,8 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('factures-mensuelles/numero', [FactureMensuelleController::class, 'numero']);
 
+    Route::get('categories', [CategorieController::class, 'index']);
     Route::middleware('admin')->group(function () {
-        Route::get('categories', [CategorieController::class, 'index']);
         Route::post('categories', [CategorieController::class, 'store']);
         Route::put('categories/{nom}', [CategorieController::class, 'update']);
         Route::delete('categories/{nom}', [CategorieController::class, 'destroy']);
