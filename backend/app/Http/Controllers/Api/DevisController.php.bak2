@@ -201,12 +201,9 @@ class DevisController extends Controller
 
     public function destroy(string $id)
     {
-        return DB::transaction(function () use ($id) {
-            $devis = Devis::findOrFail($id);
-            $devis->lignes()->delete();
-            $devis->delete();
-            return response()->json(null, 204);
-        });
+        Devis::findOrFail($id)->delete();
+
+        return response()->json(null, 204);
     }
 
     public function updatePaiement(Request $request, string $id)
