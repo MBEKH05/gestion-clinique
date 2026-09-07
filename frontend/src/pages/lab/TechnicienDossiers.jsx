@@ -10,6 +10,13 @@ import PdfPreviewModal from '../../components/lab/PdfPreviewModal';
 const PAGE_SIZE = 20;
 const ACTIFS = 'EN_ATTENTE,VALIDE_MEDECIN,REFUSE';
 
+const FILTERS = [
+  { key: 'tous', label: 'Tous', statut: ACTIFS },
+  { key: 'EN_ATTENTE', label: 'En attente', statut: 'EN_ATTENTE' },
+  { key: 'VALIDE_MEDECIN', label: 'Valides medecin', statut: 'VALIDE_MEDECIN' },
+  { key: 'REFUSE', label: 'Refuses', statut: 'REFUSE' },
+];
+
 function groupByPatient(dossiers) {
   const map = {};
   dossiers.forEach((d) => {
@@ -21,13 +28,6 @@ function groupByPatient(dossiers) {
   });
   return Object.values(map);
 }
-
-const FILTERS = [
-  { key: 'tous', label: 'Tous', statut: ACTIFS },
-  { key: 'EN_ATTENTE', label: 'En attente', statut: 'EN_ATTENTE' },
-  { key: 'VALIDE_MEDECIN', label: 'Valides medecin', statut: 'VALIDE_MEDECIN' },
-  { key: 'REFUSE', label: 'Refuses', statut: 'REFUSE' },
-];
 
 export default function TechnicienDossiers() {
   const { user } = useAuth();
@@ -50,10 +50,7 @@ export default function TechnicienDossiers() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setDebounced(search);
-      setPage(1);
-    }, 400);
+    const t = setTimeout(() => { setDebounced(search); setPage(1); }, 400);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -80,10 +77,7 @@ export default function TechnicienDossiers() {
     const statut = FILTERS.find((f) => f.key === filter)?.statut;
     labDossiersAPI
       .getAll({ page, page_size: PAGE_SIZE, search: debounced, statut })
-      .then(({ data }) => {
-        setDossiers(data.results);
-        setCount(data.count);
-      })
+      .then(({ data }) => { setDossiers(data.results); setCount(data.count); })
       .finally(() => setLoading(false));
   };
 
@@ -92,15 +86,12 @@ export default function TechnicienDossiers() {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  const openPreview = async (id) => {
-    const { data } = await labDossiersAPI.get(id);
-    setPreviewDocs(data.documents || []);
+  const openPreview = async (groupe) => {
+    const allData = await Promise.all(groupe.dossiers.map((d) => labDossiersAPI.get(d.id)));
+    setPreviewDocs(allData.flatMap((r) => r.data.documents || []));
   };
 
-  const refreshAll = () => {
-    load();
-    loadCounters();
-  };
+  const refreshAll = () => { load(); loadCounters(); };
 
   const handleDelete = async () => {
     setBusy(true);
@@ -116,8 +107,9 @@ export default function TechnicienDossiers() {
     }
   };
 
-  const handleValiderDefinitivement = async (id) => {
-    await labDossiersAPI.confirm(id);
+  const handleValiderDefinitivement = async (groupe) => {
+    const toConfirm = groupe.dossiers.filter((d) => d.statut === 'VALIDE_MEDECIN');
+    await Promise.all(toConfirm.map((d) => labDossiersAPI.confirm(d.id)));
     refreshAll();
   };
 
@@ -128,6 +120,8 @@ export default function TechnicienDossiers() {
     { key: 'REFUSE', label: 'Refuses', value: counters?.refuse, grad: 'grad-rose' },
     { key: 'finalises', label: 'Finalises', value: counters?.finalises, grad: 'grad-cyan' },
   ];
+
+  const groupes = groupByPatient(dossiers);
 
   return (
     <div>
@@ -158,9 +152,7 @@ export default function TechnicienDossiers() {
               className={`lab-counter-card p-3 h-100 d-flex align-items-center gap-3 ${filter === c.key ? 'active' : ''}`}
               onClick={() => (c.key === 'finalises' ? navigate('/lab/liste-dossiers') : (setFilter(c.key), setPage(1)))}
             >
-              <div className={`stat-icon ${c.grad}`}>
-                <i className="bi bi-folder2 fs-5"></i>
-              </div>
+              <div className={`stat-icon ${c.grad}`}><i className="bi bi-folder2 fs-5"></i></div>
               <div>
                 <div className="text-muted small">{c.label}</div>
                 <div className="stat-value">{c.value ?? '-'}</div>
@@ -175,10 +167,7 @@ export default function TechnicienDossiers() {
           <button
             key={f.key}
             className={`btn btn-sm ${filter === f.key ? 'btn-primary' : 'btn-outline-secondary'}`}
-            onClick={() => {
-              setFilter(f.key);
-              setPage(1);
-            }}
+            onClick={() => { setFilter(f.key); setPage(1); }}
           >
             {f.label}
           </button>
@@ -186,9 +175,7 @@ export default function TechnicienDossiers() {
       </div>
 
       {loading ? (
-        <div className="text-center py-5">
-          <div className="spinner-border text-primary"></div>
-        </div>
+        <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>
       ) : (
         <>
           <div className="table-responsive">
@@ -200,70 +187,56 @@ export default function TechnicienDossiers() {
                   <th>Statut</th>
                   <th>Medecin</th>
                   <th>Date</th>
-                  <th>Commentaire</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {groupByPatient(dossiers).map((groupe) => (
-                  <>
-                    <tr key={groupe.key} className="table-secondary">
-                      <td colSpan={7} className="py-2">
-                        <i className="bi bi-person-fill me-2"></i>
+                {groupes.map((groupe) => {
+                  const latest = groupe.dossiers[0];
+                  const badge = statutBadge(latest.statut);
+                  // Actions disponibles selon les statuts dans le groupe
+                  const modifiable = groupe.dossiers.find((d) => ['EN_ATTENTE', 'REFUSE'].includes(d.statut));
+                  const hasValideMedecin = groupe.dossiers.some((d) => d.statut === 'VALIDE_MEDECIN');
+                  return (
+                    <tr key={groupe.key}>
+                      <td>
                         <strong>{groupe.patient_nom}</strong>
-                        {groupe.numero_client && (
-                          <span className="text-muted ms-2">• N° {groupe.numero_client}</span>
+                        {groupe.dossiers.length > 1 && (
+                          <span className="badge bg-secondary ms-2">{groupe.dossiers.length}</span>
                         )}
-                        <span className="badge bg-secondary ms-2">
-                          {groupe.dossiers.length} dossier{groupe.dossiers.length > 1 ? 's' : ''}
-                        </span>
+                      </td>
+                      <td>{groupe.numero_client || '-'}</td>
+                      <td><span className={`badge ${badge.className}`}>{badge.label}</span></td>
+                      <td>{latest.medecin?.name || '-'}</td>
+                      <td>{latest.created_at ? new Date(latest.created_at).toLocaleDateString('fr-FR') : '-'}</td>
+                      <td>
+                        <div className="d-flex gap-1 flex-wrap">
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(groupe)}>
+                            Voir PDF
+                          </button>
+                          {modifiable && (
+                            <>
+                              <button className="btn btn-sm btn-outline-primary" onClick={() => setEditing(modifiable)}>
+                                Modifier
+                              </button>
+                              <button className="btn btn-sm btn-outline-danger" onClick={() => setDeleting(modifiable)}>
+                                Supprimer
+                              </button>
+                            </>
+                          )}
+                          {hasValideMedecin && (
+                            <button className="btn btn-sm btn-primary" onClick={() => handleValiderDefinitivement(groupe)}>
+                              Valider definitivement
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                    {groupe.dossiers.map((d) => {
-                      const badge = statutBadge(d.statut);
-                      const modifiable = ['EN_ATTENTE', 'REFUSE'].includes(d.statut);
-                      return (
-                        <tr key={d.id}>
-                          <td className="ps-4 text-muted">
-                            <i className="bi bi-arrow-return-right me-1"></i>
-                          </td>
-                          <td>{d.numero_client || '-'}</td>
-                          <td><span className={`badge ${badge.className}`}>{badge.label}</span></td>
-                          <td>{d.medecin?.name || '-'}</td>
-                          <td>{d.created_at ? new Date(d.created_at).toLocaleDateString('fr-FR') : '-'}</td>
-                          <td className="small text-muted">{d.motif_refus || '-'}</td>
-                          <td>
-                            <div className="d-flex gap-1 flex-wrap">
-                              <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(d.id)}>
-                                Voir PDF
-                              </button>
-                              {modifiable && (
-                                <>
-                                  <button className="btn btn-sm btn-outline-primary" onClick={() => setEditing(d)}>
-                                    Modifier
-                                  </button>
-                                  <button className="btn btn-sm btn-outline-danger" onClick={() => setDeleting(d)}>
-                                    Supprimer
-                                  </button>
-                                </>
-                              )}
-                              {d.statut === 'VALIDE_MEDECIN' && (
-                                <button className="btn btn-sm btn-primary" onClick={() => handleValiderDefinitivement(d.id)}>
-                                  Valider definitivement
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </>
-                ))}
-                {dossiers.length === 0 && (
+                  );
+                })}
+                {groupes.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">
-                      Aucun dossier trouve.
-                    </td>
+                    <td colSpan={6} className="text-center text-muted py-4">Aucun dossier trouve.</td>
                   </tr>
                 )}
               </tbody>
@@ -271,38 +244,17 @@ export default function TechnicienDossiers() {
           </div>
 
           <div className="d-flex justify-content-between align-items-center mt-2">
-            <span className="text-muted small">
-              Page {page} / {totalPages} &mdash; {count} dossiers
-            </span>
+            <span className="text-muted small">Page {page} / {totalPages} &mdash; {count} dossiers</span>
             <div className="d-flex gap-1">
-              <button className="btn btn-sm btn-outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                Precedent
-              </button>
-              <button className="btn btn-sm btn-outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                Suivant
-              </button>
+              <button className="btn btn-sm btn-outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Precedent</button>
+              <button className="btn btn-sm btn-outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Suivant</button>
             </div>
           </div>
         </>
       )}
 
-      <ImportModal
-        show={showImport}
-        onClose={() => setShowImport(false)}
-        onDone={() => {
-          setShowImport(false);
-          refreshAll();
-        }}
-      />
-
-      <EditModal
-        dossier={editing}
-        onClose={() => setEditing(null)}
-        onDone={() => {
-          setEditing(null);
-          refreshAll();
-        }}
-      />
+      <ImportModal show={showImport} onClose={() => setShowImport(false)} onDone={() => { setShowImport(false); refreshAll(); }} />
+      <EditModal dossier={editing} onClose={() => setEditing(null)} onDone={() => { setEditing(null); refreshAll(); }} />
 
       <ConfirmModal
         show={!!deleting}
@@ -332,13 +284,7 @@ function ImportModal({ show, onClose, onDone }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (show) {
-      setNumeroClient('');
-      setPatientNom('');
-      setPatientTelephone('');
-      setFiles([]);
-      setError('');
-    }
+    if (show) { setNumeroClient(''); setPatientNom(''); setPatientTelephone(''); setFiles([]); setError(''); }
   }, [show]);
 
   const handleFilesChange = (e) => setFiles(Array.from(e.target.files));
@@ -347,14 +293,8 @@ function ImportModal({ show, onClose, onDone }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!patientNom.trim()) {
-      setError('Le nom du patient est requis.');
-      return;
-    }
-    if (files.length === 0) {
-      setError('Ajoutez au moins un document PDF.');
-      return;
-    }
+    if (!patientNom.trim()) { setError('Le nom du patient est requis.'); return; }
+    if (files.length === 0) { setError('Ajoutez au moins un document PDF.'); return; }
     setSaving(true);
     try {
       const formData = new FormData();
@@ -387,13 +327,7 @@ function ImportModal({ show, onClose, onDone }) {
         </div>
         <div className="mb-3">
           <label className="form-label">Telephone du patient</label>
-          <input
-            type="tel"
-            className="form-control"
-            value={patientTelephone}
-            onChange={(e) => setPatientTelephone(e.target.value)}
-            placeholder="77 123 45 67"
-          />
+          <input type="tel" className="form-control" value={patientTelephone} onChange={(e) => setPatientTelephone(e.target.value)} placeholder="77 123 45 67" />
         </div>
         <div className="mb-3">
           <label className="form-label">Documents PDF</label>
@@ -429,13 +363,7 @@ function EditModal({ dossier, onClose, onDone }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (dossier) {
-      setNumeroClient(dossier.numero_client || '');
-      setPatientNom(dossier.patient_nom || '');
-      setPatientTelephone(dossier.patient_telephone || '');
-      setFile(null);
-      setError('');
-    }
+    if (dossier) { setNumeroClient(dossier.numero_client || ''); setPatientNom(dossier.patient_nom || ''); setPatientTelephone(dossier.patient_telephone || ''); setFile(null); setError(''); }
   }, [dossier]);
 
   if (!dossier) return null;
@@ -473,13 +401,7 @@ function EditModal({ dossier, onClose, onDone }) {
         </div>
         <div className="mb-3">
           <label className="form-label">Telephone du patient</label>
-          <input
-            type="tel"
-            className="form-control"
-            value={patientTelephone}
-            onChange={(e) => setPatientTelephone(e.target.value)}
-            placeholder="77 123 45 67"
-          />
+          <input type="tel" className="form-control" value={patientTelephone} onChange={(e) => setPatientTelephone(e.target.value)} placeholder="77 123 45 67" />
         </div>
         <div className="mb-3">
           <label className="form-label">Remplacer le fichier PDF (optionnel)</label>

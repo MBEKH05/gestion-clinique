@@ -6,6 +6,18 @@ import PdfPreviewModal from '../../components/lab/PdfPreviewModal';
 
 const PAGE_SIZE = 20;
 
+function groupByPatient(dossiers) {
+  const map = {};
+  dossiers.forEach((d) => {
+    const key = (d.patient_nom || '').toLowerCase() + '||' + (d.numero_client || '');
+    if (!map[key]) {
+      map[key] = { key, patient_nom: d.patient_nom, numero_client: d.numero_client, dossiers: [] };
+    }
+    map[key].dossiers.push(d);
+  });
+  return Object.values(map);
+}
+
 export default function MedecinDossiers() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -19,10 +31,7 @@ export default function MedecinDossiers() {
   const [refusing, setRefusing] = useState(null);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setDebounced(search);
-      setPage(1);
-    }, 400);
+    const t = setTimeout(() => { setDebounced(search); setPage(1); }, 400);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -30,10 +39,7 @@ export default function MedecinDossiers() {
     setLoading(true);
     labDossiersAPI
       .getAll({ page, page_size: PAGE_SIZE, search: debounced, statut: 'EN_ATTENTE' })
-      .then(({ data }) => {
-        setDossiers(data.results);
-        setCount(data.count);
-      })
+      .then(({ data }) => { setDossiers(data.results); setCount(data.count); })
       .finally(() => setLoading(false));
   };
 
@@ -41,10 +47,12 @@ export default function MedecinDossiers() {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  const openPreview = async (id) => {
-    const { data } = await labDossiersAPI.get(id);
-    setPreviewDocs(data.documents || []);
+  const openPreview = async (groupe) => {
+    const allData = await Promise.all(groupe.dossiers.map((d) => labDossiersAPI.get(d.id)));
+    setPreviewDocs(allData.flatMap((r) => r.data.documents || []));
   };
+
+  const groupes = groupByPatient(dossiers);
 
   return (
     <div>
@@ -66,9 +74,7 @@ export default function MedecinDossiers() {
       </div>
 
       {loading ? (
-        <div className="text-center py-5">
-          <div className="spinner-border text-primary"></div>
-        </div>
+        <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>
       ) : count === 0 ? (
         <div className="card shadow-sm">
           <div className="card-body text-center py-5">
@@ -85,35 +91,41 @@ export default function MedecinDossiers() {
                 <tr>
                   <th>Patient</th>
                   <th>N&deg; client</th>
-                  <th>Statut</th>
                   <th>Technicien</th>
                   <th>Date</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {dossiers.map((d) => (
-                  <tr key={d.id}>
-                    <td>{d.patient_nom}</td>
-                    <td>{d.numero_client || '-'}</td>
-                    <td><span className="badge badge-warning">En attente</span></td>
-                    <td>{d.technicien?.name || '-'}</td>
-                    <td>{d.created_at ? new Date(d.created_at).toLocaleDateString('fr-FR') : '-'}</td>
-                    <td>
-                      <div className="d-flex gap-1 flex-wrap">
-                        <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(d.id)}>
-                          Voir PDF
-                        </button>
-                        <button className="btn btn-sm btn-success" onClick={() => setValidating(d)}>
-                          Valider
-                        </button>
-                        <button className="btn btn-sm btn-outline-danger" onClick={() => setRefusing(d)}>
-                          Refuser
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {groupes.map((groupe) => {
+                  const latest = groupe.dossiers[0];
+                  return (
+                    <tr key={groupe.key}>
+                      <td>
+                        <strong>{groupe.patient_nom}</strong>
+                        {groupe.dossiers.length > 1 && (
+                          <span className="badge bg-secondary ms-2">{groupe.dossiers.length}</span>
+                        )}
+                      </td>
+                      <td>{groupe.numero_client || '-'}</td>
+                      <td>{latest.technicien?.name || '-'}</td>
+                      <td>{latest.created_at ? new Date(latest.created_at).toLocaleDateString('fr-FR') : '-'}</td>
+                      <td>
+                        <div className="d-flex gap-1 flex-wrap">
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(groupe)}>
+                            Voir PDF
+                          </button>
+                          <button className="btn btn-sm btn-success" onClick={() => setValidating(groupe)}>
+                            Valider
+                          </button>
+                          <button className="btn btn-sm btn-outline-danger" onClick={() => setRefusing(groupe)}>
+                            Refuser
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -121,12 +133,8 @@ export default function MedecinDossiers() {
           <div className="d-flex justify-content-between align-items-center mt-2">
             <span className="text-muted small">Page {page} / {totalPages}</span>
             <div className="d-flex gap-1">
-              <button className="btn btn-sm btn-outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                Precedent
-              </button>
-              <button className="btn btn-sm btn-outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                Suivant
-              </button>
+              <button className="btn btn-sm btn-outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Precedent</button>
+              <button className="btn btn-sm btn-outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Suivant</button>
             </div>
           </div>
         </>
@@ -134,23 +142,23 @@ export default function MedecinDossiers() {
 
       <PdfPreviewModal show={!!previewDocs} onClose={() => setPreviewDocs(null)} documents={previewDocs || []} />
 
-      <ValiderModal dossier={validating} onClose={() => setValidating(null)} onDone={() => { setValidating(null); load(); }} />
-      <RefuserModal dossier={refusing} onClose={() => setRefusing(null)} onDone={() => { setRefusing(null); load(); }} />
+      <ValiderModal groupe={validating} onClose={() => setValidating(null)} onDone={() => { setValidating(null); load(); }} />
+      <RefuserModal groupe={refusing} onClose={() => setRefusing(null)} onDone={() => { setRefusing(null); load(); }} />
     </div>
   );
 }
 
-function ValiderModal({ dossier, onClose, onDone }) {
+function ValiderModal({ groupe, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  if (!dossier) return null;
+  if (!groupe) return null;
 
   const handleConfirm = async () => {
     setBusy(true);
     setError('');
     try {
-      await labDossiersAPI.approve(dossier.id);
+      await Promise.all(groupe.dossiers.map((d) => labDossiersAPI.approve(d.id)));
       onDone();
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur lors de la validation.');
@@ -160,52 +168,45 @@ function ValiderModal({ dossier, onClose, onDone }) {
   };
 
   return (
-    <Modal show={!!dossier} onClose={onClose} title="Valider le dossier">
+    <Modal show={!!groupe} onClose={onClose} title="Valider le dossier">
       {error && <div className="alert alert-danger py-2">{error}</div>}
       <p>
-        Vous allez valider le dossier de <strong>{dossier.patient_nom}</strong>.
+        Vous allez valider {groupe.dossiers.length > 1 ? `les ${groupe.dossiers.length} dossiers` : 'le dossier'} de{' '}
+        <strong>{groupe.patient_nom}</strong>.
       </p>
       <div className="text-muted small mb-3">
         <i className="bi bi-patch-check me-1"></i>
-        Votre cachet et votre signature seront apposes automatiquement sur le document.
+        Votre cachet et votre signature seront apposes automatiquement sur les documents.
       </div>
       <div className="d-flex gap-2">
         <button className="btn btn-success" onClick={handleConfirm} disabled={busy}>
           {busy && <span className="spinner-border spinner-border-sm me-2"></span>}
           Confirmer la validation
         </button>
-        <button className="btn btn-outline-secondary" onClick={onClose} disabled={busy}>
-          Annuler
-        </button>
+        <button className="btn btn-outline-secondary" onClick={onClose} disabled={busy}>Annuler</button>
       </div>
     </Modal>
   );
 }
 
-function RefuserModal({ dossier, onClose, onDone }) {
+function RefuserModal({ groupe, onClose, onDone }) {
   const [motif, setMotif] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (dossier) {
-      setMotif('');
-      setError('');
-    }
-  }, [dossier]);
+    if (groupe) { setMotif(''); setError(''); }
+  }, [groupe]);
 
-  if (!dossier) return null;
+  if (!groupe) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (motif.trim().length < 5) {
-      setError('Le motif de refus doit contenir au moins 5 caracteres.');
-      return;
-    }
+    if (motif.trim().length < 5) { setError('Le motif de refus doit contenir au moins 5 caracteres.'); return; }
     setBusy(true);
     setError('');
     try {
-      await labDossiersAPI.refuse(dossier.id, motif.trim());
+      await Promise.all(groupe.dossiers.map((d) => labDossiersAPI.refuse(d.id, motif.trim())));
       onDone();
     } catch (err) {
       setError(err.response?.data?.detail || 'Erreur lors du refus.');
@@ -215,7 +216,7 @@ function RefuserModal({ dossier, onClose, onDone }) {
   };
 
   return (
-    <Modal show={!!dossier} onClose={onClose} title="Refuser le dossier">
+    <Modal show={!!groupe} onClose={onClose} title="Refuser le dossier">
       {error && <div className="alert alert-danger py-2">{error}</div>}
       <form onSubmit={handleSubmit}>
         <label className="form-label">Motif de refus</label>

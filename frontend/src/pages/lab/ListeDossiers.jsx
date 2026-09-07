@@ -30,27 +30,18 @@ export default function ListeDossiers() {
   const [previewDocs, setPreviewDocs] = useState(null);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setDebounced(search);
-      setPage(1);
-    }, 400);
+    const t = setTimeout(() => { setDebounced(search); setPage(1); }, 400);
     return () => clearTimeout(t);
   }, [search]);
 
   const load = () => {
     setLoading(true);
     const params = { page, page_size: PAGE_SIZE, search: debounced };
-    if (tab === 'archives') {
-      params.statut = 'ARCHIVE';
-    } else {
-      params.exclude_archived = 1;
-    }
+    if (tab === 'archives') params.statut = 'ARCHIVE';
+    else params.exclude_archived = 1;
     labDossiersAPI
       .getAll(params)
-      .then(({ data }) => {
-        setDossiers(data.results);
-        setCount(data.count);
-      })
+      .then(({ data }) => { setDossiers(data.results); setCount(data.count); })
       .finally(() => setLoading(false));
   };
 
@@ -58,20 +49,29 @@ export default function ListeDossiers() {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  const openPreview = async (id) => {
-    const { data } = await labDossiersAPI.get(id);
-    setPreviewDocs(data.documents || []);
+  const fetchGroupeDocs = async (groupe) => {
+    const allData = await Promise.all(groupe.dossiers.map((d) => labDossiersAPI.get(d.id)));
+    return allData.flatMap((r) => r.data.documents || []);
   };
 
-  const handleDownload = async (id) => {
-    const { data } = await labDossiersAPI.get(id);
-    downloadAllDocuments(data);
+  const openPreview = async (groupe) => {
+    const allDocs = await fetchGroupeDocs(groupe);
+    setPreviewDocs(allDocs);
   };
 
-  const handleArchive = async (id) => {
-    await labDossiersAPI.archive(id);
+  const handleDownload = async (groupe) => {
+    const allData = await Promise.all(groupe.dossiers.map((d) => labDossiersAPI.get(d.id)));
+    allData.forEach((r) => downloadAllDocuments(r.data));
+  };
+
+  const handleArchive = async (groupe) => {
+    await Promise.all(
+      groupe.dossiers.filter((d) => d.statut === 'VALIDE_FINAL').map((d) => labDossiersAPI.archive(d.id))
+    );
     load();
   };
+
+  const groupes = groupByPatient(dossiers);
 
   return (
     <div>
@@ -93,24 +93,12 @@ export default function ListeDossiers() {
       </div>
 
       <div className="d-flex gap-2 mb-3">
-        <button
-          className={`btn btn-sm ${tab === 'dossiers' ? 'btn-primary' : 'btn-outline-secondary'}`}
-          onClick={() => { setTab('dossiers'); setPage(1); }}
-        >
-          Dossiers
-        </button>
-        <button
-          className={`btn btn-sm ${tab === 'archives' ? 'btn-primary' : 'btn-outline-secondary'}`}
-          onClick={() => { setTab('archives'); setPage(1); }}
-        >
-          Archives
-        </button>
+        <button className={`btn btn-sm ${tab === 'dossiers' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => { setTab('dossiers'); setPage(1); }}>Dossiers</button>
+        <button className={`btn btn-sm ${tab === 'archives' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => { setTab('archives'); setPage(1); }}>Archives</button>
       </div>
 
       {loading ? (
-        <div className="text-center py-5">
-          <div className="spinner-border text-primary"></div>
-        </div>
+        <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>
       ) : (
         <>
           <div className="table-responsive">
@@ -127,57 +115,40 @@ export default function ListeDossiers() {
                 </tr>
               </thead>
               <tbody>
-                {groupByPatient(dossiers).map((groupe) => (
-                  <>
-                    <tr key={groupe.key} className="table-secondary">
-                      <td colSpan={7} className="py-2">
-                        <i className="bi bi-person-fill me-2"></i>
+                {groupes.map((groupe) => {
+                  const latest = groupe.dossiers[0];
+                  const badge = statutBadge(latest.statut);
+                  const hasValideFinal = groupe.dossiers.some((d) => d.statut === 'VALIDE_FINAL');
+                  return (
+                    <tr key={groupe.key}>
+                      <td>
                         <strong>{groupe.patient_nom}</strong>
-                        {groupe.numero_client && (
-                          <span className="text-muted ms-2">• N° {groupe.numero_client}</span>
+                        {groupe.dossiers.length > 1 && (
+                          <span className="badge bg-secondary ms-2">{groupe.dossiers.length}</span>
                         )}
-                        <span className="badge bg-secondary ms-2">
-                          {groupe.dossiers.length} dossier{groupe.dossiers.length > 1 ? 's' : ''}
-                        </span>
+                      </td>
+                      <td>{groupe.numero_client || '-'}</td>
+                      <td><span className={`badge ${badge.className}`}>{badge.label}</span></td>
+                      <td>{latest.medecin?.name || '-'}</td>
+                      <td>{latest.technicien?.name || '-'}</td>
+                      <td>{latest.created_at ? new Date(latest.created_at).toLocaleDateString('fr-FR') : '-'}</td>
+                      <td>
+                        <div className="d-flex gap-1 flex-wrap">
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(groupe)}>Apercu</button>
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDownload(groupe)}>
+                            <i className="bi bi-download"></i>
+                          </button>
+                          {labRole === 'medecin' && hasValideFinal && (
+                            <button className="btn btn-sm btn-primary" onClick={() => handleArchive(groupe)}>Archiver</button>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                    {groupe.dossiers.map((d) => {
-                      const badge = statutBadge(d.statut);
-                      return (
-                        <tr key={d.id}>
-                          <td className="ps-4 text-muted">
-                            <i className="bi bi-arrow-return-right me-1"></i>
-                          </td>
-                          <td>{d.numero_client || '-'}</td>
-                          <td><span className={`badge ${badge.className}`}>{badge.label}</span></td>
-                          <td>{d.medecin?.name || '-'}</td>
-                          <td>{d.technicien?.name || '-'}</td>
-                          <td>{d.created_at ? new Date(d.created_at).toLocaleDateString('fr-FR') : '-'}</td>
-                          <td>
-                            <div className="d-flex gap-1 flex-wrap">
-                              <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(d.id)}>
-                                Apercu
-                              </button>
-                              <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDownload(d.id)}>
-                                <i className="bi bi-download"></i>
-                              </button>
-                              {labRole === 'medecin' && d.statut === 'VALIDE_FINAL' && (
-                                <button className="btn btn-sm btn-primary" onClick={() => handleArchive(d.id)}>
-                                  Archiver
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </>
-                ))}
-                {dossiers.length === 0 && (
+                  );
+                })}
+                {groupes.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">
-                      Aucun dossier trouve.
-                    </td>
+                    <td colSpan={7} className="text-center text-muted py-4">Aucun dossier trouve.</td>
                   </tr>
                 )}
               </tbody>
@@ -187,12 +158,8 @@ export default function ListeDossiers() {
           <div className="d-flex justify-content-between align-items-center mt-2">
             <span className="text-muted small">Page {page} / {totalPages}</span>
             <div className="d-flex gap-1">
-              <button className="btn btn-sm btn-outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                Precedent
-              </button>
-              <button className="btn btn-sm btn-outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                Suivant
-              </button>
+              <button className="btn btn-sm btn-outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Precedent</button>
+              <button className="btn btn-sm btn-outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Suivant</button>
             </div>
           </div>
         </>

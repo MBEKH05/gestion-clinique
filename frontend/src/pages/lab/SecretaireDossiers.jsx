@@ -12,7 +12,7 @@ function groupByPatient(dossiers) {
   dossiers.forEach((d) => {
     const key = (d.patient_nom || '').toLowerCase() + '||' + (d.numero_client || '');
     if (!map[key]) {
-      map[key] = { key, patient_nom: d.patient_nom, numero_client: d.numero_client, dossiers: [] };
+      map[key] = { key, patient_nom: d.patient_nom, numero_client: d.numero_client, patient_telephone: d.patient_telephone, dossiers: [] };
     }
     map[key].dossiers.push(d);
   });
@@ -33,10 +33,7 @@ export default function SecretaireDossiers() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setDebounced(search);
-      setPage(1);
-    }, 400);
+    const t = setTimeout(() => { setDebounced(search); setPage(1); }, 400);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -44,10 +41,7 @@ export default function SecretaireDossiers() {
     setLoading(true);
     labDossiersAPI
       .getAll({ page, page_size: PAGE_SIZE, search: debounced, statut: 'VALIDE_FINAL' })
-      .then(({ data }) => {
-        setDossiers(data.results);
-        setCount(data.count);
-      })
+      .then(({ data }) => { setDossiers(data.results); setCount(data.count); })
       .finally(() => setLoading(false));
   };
 
@@ -55,30 +49,24 @@ export default function SecretaireDossiers() {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  // Recupere tous les documents de tous les dossiers du meme patient
-  const fetchAllPatientDocs = async (dossierId) => {
-    const groupe = groupByPatient(dossiers).find((g) => g.dossiers.some((d) => d.id === dossierId));
-    const allData = await Promise.all((groupe?.dossiers || [{ id: dossierId }]).map((d) => labDossiersAPI.get(d.id)));
-    return {
-      firstData: allData[0].data,
-      allDocs: allData.flatMap((r) => r.data.documents || []),
-    };
+  // Recupere tous les documents de tous les dossiers du groupe patient
+  const fetchGroupeDocs = async (groupe) => {
+    const allData = await Promise.all(groupe.dossiers.map((d) => labDossiersAPI.get(d.id)));
+    return allData.flatMap((r) => r.data.documents || []);
   };
 
-  const openPreview = async (id) => {
-    const { allDocs } = await fetchAllPatientDocs(id);
+  const openPreview = async (groupe) => {
+    const allDocs = await fetchGroupeDocs(groupe);
     setPreviewDocs(allDocs);
   };
 
-  const handlePrint = async (id) => {
-    const { allDocs } = await fetchAllPatientDocs(id);
-    allDocs.forEach((doc, index) => {
-      setTimeout(() => printPdf(doc.url), index * 1200);
-    });
+  const handlePrint = async (groupe) => {
+    const allDocs = await fetchGroupeDocs(groupe);
+    allDocs.forEach((doc, i) => setTimeout(() => printPdf(doc.url), i * 1200));
   };
 
-  const handleDownload = async (id) => {
-    const { allDocs } = await fetchAllPatientDocs(id);
+  const handleDownload = async (groupe) => {
+    const allDocs = await fetchGroupeDocs(groupe);
     allDocs.forEach((doc) => {
       const a = document.createElement('a');
       a.href = doc.url;
@@ -87,8 +75,9 @@ export default function SecretaireDossiers() {
     });
   };
 
-  const handleWhatsApp = async (id) => {
-    const { firstData, allDocs } = await fetchAllPatientDocs(id);
+  const handleWhatsApp = async (groupe) => {
+    const allDocs = await fetchGroupeDocs(groupe);
+    const firstData = { patient_nom: groupe.patient_nom, patient_telephone: groupe.patient_telephone };
     window.open(buildWhatsAppLink(firstData, allDocs), '_blank', 'noreferrer');
   };
 
@@ -96,7 +85,7 @@ export default function SecretaireDossiers() {
     setBusy(true);
     setError('');
     try {
-      await labDossiersAPI.archive(archiving.id);
+      await Promise.all(archiving.dossiers.map((d) => labDossiersAPI.archive(d.id)));
       setArchiving(null);
       load();
     } catch (err) {
@@ -105,6 +94,8 @@ export default function SecretaireDossiers() {
       setBusy(false);
     }
   };
+
+  const groupes = groupByPatient(dossiers);
 
   return (
     <div>
@@ -126,9 +117,7 @@ export default function SecretaireDossiers() {
       </div>
 
       {loading ? (
-        <div className="text-center py-5">
-          <div className="spinner-border text-primary"></div>
-        </div>
+        <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>
       ) : (
         <>
           <div className="table-responsive">
@@ -144,57 +133,45 @@ export default function SecretaireDossiers() {
                 </tr>
               </thead>
               <tbody>
-                {groupByPatient(dossiers).map((groupe) => (
-                  <>
-                    <tr key={groupe.key} className="table-secondary">
-                      <td colSpan={6} className="py-2">
-                        <i className="bi bi-person-fill me-2"></i>
+                {groupes.map((groupe) => {
+                  const latest = groupe.dossiers[0];
+                  return (
+                    <tr key={groupe.key}>
+                      <td>
                         <strong>{groupe.patient_nom}</strong>
-                        {groupe.numero_client && (
-                          <span className="text-muted ms-2">• N° {groupe.numero_client}</span>
+                        {groupe.dossiers.length > 1 && (
+                          <span className="badge bg-secondary ms-2">{groupe.dossiers.length}</span>
                         )}
-                        <span className="badge bg-secondary ms-2">
-                          {groupe.dossiers.length} dossier{groupe.dossiers.length > 1 ? 's' : ''}
-                        </span>
+                      </td>
+                      <td>{groupe.numero_client || '-'}</td>
+                      <td>{latest.medecin?.name || '-'}</td>
+                      <td>{latest.technicien?.name || '-'}</td>
+                      <td>{latest.valide_le ? new Date(latest.valide_le).toLocaleDateString('fr-FR') : '-'}</td>
+                      <td>
+                        <div className="d-flex gap-1 flex-wrap">
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(groupe)}>
+                            Apercu
+                          </button>
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => handlePrint(groupe)}>
+                            <i className="bi bi-printer"></i>
+                          </button>
+                          <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDownload(groupe)}>
+                            <i className="bi bi-download"></i>
+                          </button>
+                          <button className="btn btn-sm btn-outline-success" onClick={() => handleWhatsApp(groupe)}>
+                            <i className="bi bi-whatsapp"></i>
+                          </button>
+                          <button className="btn btn-sm btn-primary" onClick={() => setArchiving(groupe)}>
+                            Archiver
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                    {groupe.dossiers.map((d) => (
-                      <tr key={d.id}>
-                        <td className="ps-4 text-muted">
-                          <i className="bi bi-arrow-return-right me-1"></i>
-                        </td>
-                        <td>{d.numero_client || '-'}</td>
-                        <td>{d.medecin?.name || '-'}</td>
-                        <td>{d.technicien?.name || '-'}</td>
-                        <td>{d.valide_le ? new Date(d.valide_le).toLocaleDateString('fr-FR') : '-'}</td>
-                        <td>
-                          <div className="d-flex gap-1 flex-wrap">
-                            <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(d.id)}>
-                              Apercu
-                            </button>
-                            <button className="btn btn-sm btn-outline-secondary" onClick={() => handlePrint(d.id)}>
-                              <i className="bi bi-printer"></i>
-                            </button>
-                            <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDownload(d.id)}>
-                              <i className="bi bi-download"></i>
-                            </button>
-                            <button className="btn btn-sm btn-outline-success" onClick={() => handleWhatsApp(d.id)}>
-                              <i className="bi bi-whatsapp"></i>
-                            </button>
-                            <button className="btn btn-sm btn-primary" onClick={() => setArchiving(d)}>
-                              Archiver
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </>
-                ))}
-                {dossiers.length === 0 && (
+                  );
+                })}
+                {groupes.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center text-muted py-4">
-                      Aucun dossier a imprimer.
-                    </td>
+                    <td colSpan={6} className="text-center text-muted py-4">Aucun dossier a imprimer.</td>
                   </tr>
                 )}
               </tbody>
@@ -204,12 +181,8 @@ export default function SecretaireDossiers() {
           <div className="d-flex justify-content-between align-items-center mt-2">
             <span className="text-muted small">Page {page} / {totalPages}</span>
             <div className="d-flex gap-1">
-              <button className="btn btn-sm btn-outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                Precedent
-              </button>
-              <button className="btn btn-sm btn-outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                Suivant
-              </button>
+              <button className="btn btn-sm btn-outline-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Precedent</button>
+              <button className="btn btn-sm btn-outline-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Suivant</button>
             </div>
           </div>
         </>
@@ -221,12 +194,12 @@ export default function SecretaireDossiers() {
         show={!!archiving}
         onClose={() => { setArchiving(null); setError(''); }}
         onConfirm={handleArchive}
-        title="Archiver le dossier"
+        title="Archiver les dossiers"
         message={archiving && (
           <>
-            Archiver le dossier de <strong>{archiving.patient_nom}</strong>, valide le{' '}
-            {archiving.valide_le ? new Date(archiving.valide_le).toLocaleDateString('fr-FR') : '-'} ?
-            <div className="text-muted small mt-2">Le dossier restera consultable une fois archive.</div>
+            Archiver {archiving.dossiers.length > 1 ? `les ${archiving.dossiers.length} dossiers` : 'le dossier'} de{' '}
+            <strong>{archiving.patient_nom}</strong> ?
+            <div className="text-muted small mt-2">Les dossiers resteront consultables une fois archives.</div>
           </>
         )}
         confirmLabel="Archiver"
