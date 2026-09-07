@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { labDossiersAPI } from '../../api/labEndpoints';
 import { useAuth } from '../../context/AuthContext';
-import { buildWhatsAppLink, downloadAllDocuments, printAllDocuments } from '../../utils/labDossierUtils';
+import { buildWhatsAppLink, printPdf } from '../../utils/labDossierUtils';
 import ConfirmModal from '../../components/lab/ConfirmModal';
 import PdfPreviewModal from '../../components/lab/PdfPreviewModal';
 
@@ -55,24 +55,41 @@ export default function SecretaireDossiers() {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
+  // Recupere tous les documents de tous les dossiers du meme patient
+  const fetchAllPatientDocs = async (dossierId) => {
+    const groupe = groupByPatient(dossiers).find((g) => g.dossiers.some((d) => d.id === dossierId));
+    const allData = await Promise.all((groupe?.dossiers || [{ id: dossierId }]).map((d) => labDossiersAPI.get(d.id)));
+    return {
+      firstData: allData[0].data,
+      allDocs: allData.flatMap((r) => r.data.documents || []),
+    };
+  };
+
   const openPreview = async (id) => {
-    const { data } = await labDossiersAPI.get(id);
-    setPreviewDocs(data.documents || []);
+    const { allDocs } = await fetchAllPatientDocs(id);
+    setPreviewDocs(allDocs);
   };
 
   const handlePrint = async (id) => {
-    const { data } = await labDossiersAPI.get(id);
-    printAllDocuments(data);
+    const { allDocs } = await fetchAllPatientDocs(id);
+    allDocs.forEach((doc, index) => {
+      setTimeout(() => printPdf(doc.url), index * 1200);
+    });
   };
 
   const handleDownload = async (id) => {
-    const { data } = await labDossiersAPI.get(id);
-    downloadAllDocuments(data);
+    const { allDocs } = await fetchAllPatientDocs(id);
+    allDocs.forEach((doc) => {
+      const a = document.createElement('a');
+      a.href = doc.url;
+      a.download = doc.nom_original || 'document.pdf';
+      a.click();
+    });
   };
 
   const handleWhatsApp = async (id) => {
-    const { data } = await labDossiersAPI.get(id);
-    window.open(buildWhatsAppLink(data), '_blank', 'noreferrer');
+    const { firstData, allDocs } = await fetchAllPatientDocs(id);
+    window.open(buildWhatsAppLink(firstData, allDocs), '_blank', 'noreferrer');
   };
 
   const handleArchive = async () => {

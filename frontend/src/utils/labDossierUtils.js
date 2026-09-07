@@ -10,12 +10,12 @@ export function statutBadge(statut) {
   return STATUT_LABELS[statut] || { label: statut, className: 'bg-secondary' };
 }
 
-export function buildWhatsAppLink(dossier) {
+export function buildWhatsAppLink(dossier, allDocuments = null) {
   const telephone = (dossier.patient_telephone || '').replace(/[^\d+]/g, '');
-  const documents = dossier.documents || [];
+  const documents = allDocuments ?? (dossier.documents || []);
   const intro = documents.length > 1
-    ? `Vos resultats d'analyse (dossier ${dossier.numero_client || ''}) sont disponibles.`
-    : `Votre resultat d'analyse (dossier ${dossier.numero_client || ''}) est disponible.`;
+    ? `Vos resultats d'analyses sont disponibles.`
+    : `Votre resultat d'analyse est disponible.`;
   const links = documents.map((doc, index) => (
     documents.length > 1 ? `Document ${index + 1} : ${doc.url}` : `Vous pouvez le consulter ici : ${doc.url}`
   ));
@@ -27,9 +27,6 @@ export function buildWhatsAppLink(dossier) {
     .filter(Boolean)
     .join(' ');
 
-  // Sans numero connu, on ouvre WhatsApp avec le message pre-rempli et on
-  // laisse la secretaire choisir le contact du patient elle-meme (envoi
-  // manuel). Si un numero est disponible, on va directement a la conversation.
   const base = telephone ? `https://wa.me/${telephone.replace('+', '')}` : 'https://wa.me/';
 
   return `${base}?text=${encodeURIComponent(message)}`;
