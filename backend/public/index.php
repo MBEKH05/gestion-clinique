@@ -4,6 +4,12 @@ use Illuminate\Http\Request;
 
 define('LARAVEL_START', microtime(true));
 
+// Force les variables d'environnement du .env a prendre la priorite
+// sur les variables systeme (ex: DB_PASSWORD systeme Windows).
+putenv('DB_PASSWORD=');
+putenv('DB_USER=');
+putenv('DB_NAME=');
+
 // Determine if the application is in maintenance mode...
 if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
     require $maintenance;

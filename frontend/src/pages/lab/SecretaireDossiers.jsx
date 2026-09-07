@@ -7,6 +7,18 @@ import PdfPreviewModal from '../../components/lab/PdfPreviewModal';
 
 const PAGE_SIZE = 20;
 
+function groupByPatient(dossiers) {
+  const map = {};
+  dossiers.forEach((d) => {
+    const key = (d.patient_nom || '').toLowerCase() + '||' + (d.numero_client || '');
+    if (!map[key]) {
+      map[key] = { key, patient_nom: d.patient_nom, numero_client: d.numero_client, dossiers: [] };
+    }
+    map[key].dossiers.push(d);
+  });
+  return Object.values(map);
+}
+
 export default function SecretaireDossiers() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
@@ -115,33 +127,51 @@ export default function SecretaireDossiers() {
                 </tr>
               </thead>
               <tbody>
-                {dossiers.map((d) => (
-                  <tr key={d.id}>
-                    <td>{d.patient_nom}</td>
-                    <td>{d.numero_client || '-'}</td>
-                    <td>{d.medecin?.name || '-'}</td>
-                    <td>{d.technicien?.name || '-'}</td>
-                    <td>{d.valide_le ? new Date(d.valide_le).toLocaleDateString('fr-FR') : '-'}</td>
-                    <td>
-                      <div className="d-flex gap-1 flex-wrap">
-                        <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(d.id)}>
-                          Apercu
-                        </button>
-                        <button className="btn btn-sm btn-outline-secondary" onClick={() => handlePrint(d.id)}>
-                          <i className="bi bi-printer"></i>
-                        </button>
-                        <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDownload(d.id)}>
-                          <i className="bi bi-download"></i>
-                        </button>
-                        <button className="btn btn-sm btn-outline-success" onClick={() => handleWhatsApp(d.id)}>
-                          <i className="bi bi-whatsapp"></i>
-                        </button>
-                        <button className="btn btn-sm btn-primary" onClick={() => setArchiving(d)}>
-                          Archiver
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                {groupByPatient(dossiers).map((groupe) => (
+                  <>
+                    <tr key={groupe.key} className="table-secondary">
+                      <td colSpan={6} className="py-2">
+                        <i className="bi bi-person-fill me-2"></i>
+                        <strong>{groupe.patient_nom}</strong>
+                        {groupe.numero_client && (
+                          <span className="text-muted ms-2">• N° {groupe.numero_client}</span>
+                        )}
+                        <span className="badge bg-secondary ms-2">
+                          {groupe.dossiers.length} dossier{groupe.dossiers.length > 1 ? 's' : ''}
+                        </span>
+                      </td>
+                    </tr>
+                    {groupe.dossiers.map((d) => (
+                      <tr key={d.id}>
+                        <td className="ps-4 text-muted">
+                          <i className="bi bi-arrow-return-right me-1"></i>
+                        </td>
+                        <td>{d.numero_client || '-'}</td>
+                        <td>{d.medecin?.name || '-'}</td>
+                        <td>{d.technicien?.name || '-'}</td>
+                        <td>{d.valide_le ? new Date(d.valide_le).toLocaleDateString('fr-FR') : '-'}</td>
+                        <td>
+                          <div className="d-flex gap-1 flex-wrap">
+                            <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(d.id)}>
+                              Apercu
+                            </button>
+                            <button className="btn btn-sm btn-outline-secondary" onClick={() => handlePrint(d.id)}>
+                              <i className="bi bi-printer"></i>
+                            </button>
+                            <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDownload(d.id)}>
+                              <i className="bi bi-download"></i>
+                            </button>
+                            <button className="btn btn-sm btn-outline-success" onClick={() => handleWhatsApp(d.id)}>
+                              <i className="bi bi-whatsapp"></i>
+                            </button>
+                            <button className="btn btn-sm btn-primary" onClick={() => setArchiving(d)}>
+                              Archiver
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </>
                 ))}
                 {dossiers.length === 0 && (
                   <tr>

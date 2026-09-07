@@ -5,6 +5,12 @@ use Symfony\Component\Console\Input\ArgvInput;
 
 define('LARAVEL_START', microtime(true));
 
+// Force les variables d'environnement du .env a prendre la priorite
+// sur les variables systeme (ex: DB_PASSWORD systeme Windows).
+putenv('DB_PASSWORD=');
+putenv('DB_USER=');
+putenv('DB_NAME=');
+
 // Register the Composer autoloader...
 require __DIR__.'/vendor/autoload.php';
 

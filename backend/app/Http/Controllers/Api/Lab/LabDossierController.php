@@ -22,8 +22,11 @@ class LabDossierController extends Controller
 
     public function index(Request $request)
     {
+        $statutParam = $request->query('statut', '');
+        $orderColumn = ($statutParam === 'VALIDE_FINAL') ? 'valide_le' : 'created_at';
+
         $query = LabDossier::with(['technicien', 'medecin', 'archivePar'])
-            ->orderBy('created_at', 'desc');
+            ->orderBy($orderColumn, 'desc');
 
         // Un technicien ne voit jamais que ses propres dossiers, quel que
         // soit ce que le client demande. Cette route est aussi reutilisee en

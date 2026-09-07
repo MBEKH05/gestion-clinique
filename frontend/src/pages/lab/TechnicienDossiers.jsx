@@ -10,6 +10,18 @@ import PdfPreviewModal from '../../components/lab/PdfPreviewModal';
 const PAGE_SIZE = 20;
 const ACTIFS = 'EN_ATTENTE,VALIDE_MEDECIN,REFUSE';
 
+function groupByPatient(dossiers) {
+  const map = {};
+  dossiers.forEach((d) => {
+    const key = (d.patient_nom || '').toLowerCase() + '||' + (d.numero_client || '');
+    if (!map[key]) {
+      map[key] = { key, patient_nom: d.patient_nom, numero_client: d.numero_client, dossiers: [] };
+    }
+    map[key].dossiers.push(d);
+  });
+  return Object.values(map);
+}
+
 const FILTERS = [
   { key: 'tous', label: 'Tous', statut: ACTIFS },
   { key: 'EN_ATTENTE', label: 'En attente', statut: 'EN_ATTENTE' },
@@ -193,42 +205,60 @@ export default function TechnicienDossiers() {
                 </tr>
               </thead>
               <tbody>
-                {dossiers.map((d) => {
-                  const badge = statutBadge(d.statut);
-                  const modifiable = ['EN_ATTENTE', 'REFUSE'].includes(d.statut);
-                  return (
-                    <tr key={d.id}>
-                      <td>{d.patient_nom}</td>
-                      <td>{d.numero_client || '-'}</td>
-                      <td><span className={`badge ${badge.className}`}>{badge.label}</span></td>
-                      <td>{d.medecin?.name || '-'}</td>
-                      <td>{d.created_at ? new Date(d.created_at).toLocaleDateString('fr-FR') : '-'}</td>
-                      <td className="small text-muted">{d.motif_refus || '-'}</td>
-                      <td>
-                        <div className="d-flex gap-1 flex-wrap">
-                          <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(d.id)}>
-                            Voir PDF
-                          </button>
-                          {modifiable && (
-                            <>
-                              <button className="btn btn-sm btn-outline-primary" onClick={() => setEditing(d)}>
-                                Modifier
-                              </button>
-                              <button className="btn btn-sm btn-outline-danger" onClick={() => setDeleting(d)}>
-                                Supprimer
-                              </button>
-                            </>
-                          )}
-                          {d.statut === 'VALIDE_MEDECIN' && (
-                            <button className="btn btn-sm btn-primary" onClick={() => handleValiderDefinitivement(d.id)}>
-                              Valider definitivement
-                            </button>
-                          )}
-                        </div>
+                {groupByPatient(dossiers).map((groupe) => (
+                  <>
+                    <tr key={groupe.key} className="table-secondary">
+                      <td colSpan={7} className="py-2">
+                        <i className="bi bi-person-fill me-2"></i>
+                        <strong>{groupe.patient_nom}</strong>
+                        {groupe.numero_client && (
+                          <span className="text-muted ms-2">• N° {groupe.numero_client}</span>
+                        )}
+                        <span className="badge bg-secondary ms-2">
+                          {groupe.dossiers.length} dossier{groupe.dossiers.length > 1 ? 's' : ''}
+                        </span>
                       </td>
                     </tr>
-                  );
-                })}
+                    {groupe.dossiers.map((d) => {
+                      const badge = statutBadge(d.statut);
+                      const modifiable = ['EN_ATTENTE', 'REFUSE'].includes(d.statut);
+                      return (
+                        <tr key={d.id}>
+                          <td className="ps-4 text-muted">
+                            <i className="bi bi-arrow-return-right me-1"></i>
+                          </td>
+                          <td>{d.numero_client || '-'}</td>
+                          <td><span className={`badge ${badge.className}`}>{badge.label}</span></td>
+                          <td>{d.medecin?.name || '-'}</td>
+                          <td>{d.created_at ? new Date(d.created_at).toLocaleDateString('fr-FR') : '-'}</td>
+                          <td className="small text-muted">{d.motif_refus || '-'}</td>
+                          <td>
+                            <div className="d-flex gap-1 flex-wrap">
+                              <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(d.id)}>
+                                Voir PDF
+                              </button>
+                              {modifiable && (
+                                <>
+                                  <button className="btn btn-sm btn-outline-primary" onClick={() => setEditing(d)}>
+                                    Modifier
+                                  </button>
+                                  <button className="btn btn-sm btn-outline-danger" onClick={() => setDeleting(d)}>
+                                    Supprimer
+                                  </button>
+                                </>
+                              )}
+                              {d.statut === 'VALIDE_MEDECIN' && (
+                                <button className="btn btn-sm btn-primary" onClick={() => handleValiderDefinitivement(d.id)}>
+                                  Valider definitivement
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </>
+                ))}
                 {dossiers.length === 0 && (
                   <tr>
                     <td colSpan={7} className="text-center text-muted py-4">
