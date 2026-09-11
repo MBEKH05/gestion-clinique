@@ -36,6 +36,7 @@ export const assurancesAPI = {
 
 export const tarifsAPI = {
   getAll: () => api.get('/tarifs', { params: { page_size: 1000 } }),
+  getFresh: () => api.get('/tarifs', { params: { page_size: 1000, _t: Date.now() } }),
   create: (data) => api.post('/tarifs', data),
   update: (id, data) => api.put(`/tarifs/${id}`, data),
   remove: (id) => api.delete(`/tarifs/${id}`),

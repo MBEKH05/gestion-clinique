@@ -200,7 +200,7 @@ export function DataProvider({ children }) {
 
   // --- Tarifs ---
   const reloadTarifs = async () => {
-    const { data } = await tarifsAPI.getAll();
+    const { data } = await tarifsAPI.getFresh();
     const converted = (data.results || data).map(convertTarifFromAPI);
     setTarifs(converted);
     invalidateCache();

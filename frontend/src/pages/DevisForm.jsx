@@ -13,6 +13,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
 
   const isEdit = !!id;
   const [loadingDevis, setLoadingDevis] = useState(isEdit);
+  const [refreshingTarifs, setRefreshingTarifs] = useState(!isEdit);
 
   const [nomComplet, setNomComplet] = useState('');
   const [matricule, setMatricule] = useState('');
@@ -32,7 +33,9 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
   const [existingPatientId, setExistingPatientId] = useState(null);
 
   useEffect(() => {
-    if (!isEdit) reloadTarifs();
+    if (!isEdit) {
+      reloadTarifs().finally(() => setRefreshingTarifs(false));
+    }
   }, []);
 
   useEffect(() => {
@@ -180,7 +183,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
     }
   };
 
-  if (loadingDevis) {
+  if (loadingDevis || refreshingTarifs) {
     return <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>;
   }
 
