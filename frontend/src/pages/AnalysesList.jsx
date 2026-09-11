@@ -1,11 +1,20 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import { generatePDFCatalogue } from '../utils/pdfUtils';
 
 export default function AnalysesList() {
   const { category } = useParams();
-  const { analyses, deleteAnalyse } = useData();
+  const { analyses, tarifs, deleteAnalyse } = useData();
   const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    const tous = analyses.filter((a) => a.categorie === category);
+    await generatePDFCatalogue(tous, tarifs, category);
+    setExporting(false);
+  };
 
   const filtered = useMemo(() => {
     return analyses
@@ -24,9 +33,23 @@ export default function AnalysesList() {
         <h2 className="text-capitalize mb-0">
           {category} <span className="badge bg-secondary">{filtered.length}</span>
         </h2>
-        <Link to={`/base-de-donnees/${category}/ajouter`} className="btn btn-primary">
-          <i className="bi bi-plus-lg me-2"></i>Ajouter
-        </Link>
+        <div className="d-flex gap-2">
+          <button
+            className="btn btn-outline-danger"
+            onClick={handleExport}
+            disabled={exporting || filtered.length === 0}
+            title="Exporter en PDF"
+          >
+            {exporting
+              ? <span className="spinner-border spinner-border-sm me-1"></span>
+              : <i className="bi bi-file-earmark-pdf me-1"></i>
+            }
+            Exporter PDF
+          </button>
+          <Link to={`/base-de-donnees/${category}/ajouter`} className="btn btn-primary">
+            <i className="bi bi-plus-lg me-2"></i>Ajouter
+          </Link>
+        </div>
       </div>
 
       <div className="mb-3 d-flex gap-2">

@@ -313,3 +313,68 @@ export async function generatePDFListeFactures(factures, mois, annee, statistiqu
 
   doc.save(`suivi-factures-${annee}-${String(mois).padStart(2, '0')}.pdf`);
 }
+
+export async function generatePDFCatalogue(items, tarifs, categorie) {
+  await logoReady;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+  const dateStr = new Date().toLocaleDateString('fr-FR');
+  const titre = categorie.charAt(0).toUpperCase() + categorie.slice(1);
+  let y = addHeader(doc, MARGIN + 4, `CATALOGUE : ${titre.toUpperCase()}`, `Edite le ${dateStr}`);
+
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(100, 100, 100);
+  doc.text(`Total : ${items.length} article(s)`, MARGIN, y);
+  doc.setTextColor(0, 0, 0);
+  y += 8;
+
+  // En-tete du tableau
+  const colNom = MARGIN + 12;
+  const colPrix = PAGE_WIDTH - MARGIN - 5;
+  doc.setFillColor(...HEADER_BLUE);
+  doc.setTextColor(255, 255, 255);
+  doc.rect(MARGIN, y, PAGE_WIDTH - MARGIN * 2, 7, 'F');
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(9);
+  doc.text('#', MARGIN + 2, y + 5);
+  doc.text('Designation', colNom, y + 5);
+  doc.text('Prix (FCFA)', colPrix, y + 5, { align: 'right' });
+  doc.setTextColor(0, 0, 0);
+  y += 9;
+
+  doc.setFont(undefined, 'normal');
+  items.forEach((item, idx) => {
+    if (y > PAGE_HEIGHT - 25) {
+      doc.addPage();
+      y = MARGIN + 4;
+    }
+    const tarifItem = (tarifs || []).find(
+      (t) => t.analyseId === item.id && !t.ipmId && !t.assuranceId
+    );
+    const prix = tarifItem ? Math.round(Number(tarifItem.prix)) : 0;
+
+    if (idx % 2 === 0) {
+      doc.setFillColor(245, 247, 250);
+      doc.rect(MARGIN, y - 1, PAGE_WIDTH - MARGIN * 2, 6.5, 'F');
+    }
+    doc.setFontSize(9);
+    doc.text(String(idx + 1), MARGIN + 2, y + 4);
+    doc.text(item.nom, colNom, y + 4, { maxWidth: PAGE_WIDTH - MARGIN * 2 - 50 });
+    doc.text(prix > 0 ? String(prix) : '-', colPrix, y + 4, { align: 'right' });
+    y += 6.5;
+  });
+
+  y += 3;
+  doc.setDrawColor(...BLUE);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN, y, PAGE_WIDTH - MARGIN, y);
+
+  doc.setFontSize(8);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(120, 120, 120);
+  doc.text('Genere par CLINIQUE SOPE NABY', MARGIN, PAGE_HEIGHT - 10);
+  doc.text(`Page 1`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 10, { align: 'right' });
+
+  doc.save(`catalogue-${categorie}-${dateStr.replace(/\//g, '-')}.pdf`);
+}

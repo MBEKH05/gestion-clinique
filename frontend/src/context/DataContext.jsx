@@ -24,7 +24,7 @@ import {
 const DataContext = createContext(null);
 
 const CACHE_KEY = 'facturation_clinique_cache_v2';
-const CACHE_TTL_SECONDS = 3600;
+const CACHE_TTL_SECONDS = 300; // 5 minutes
 
 function readCache() {
   try {
@@ -272,21 +272,22 @@ export function DataProvider({ children }) {
   // --- Utilitaires ---
   const getPrixAnalyse = useCallback(
     (analyseId, ipmId, assuranceId) => {
-      const type = ipmId ? 'IPM' : assuranceId ? 'ASSURANCE' : null;
-
-      if (type) {
-        const generique = tarifs.find(
-          (t) => t.analyseId === analyseId && t.typePriseEnCharge === type
-        );
-        if (generique) return Number(generique.prix);
-      }
-
+      // Specific tariff first (exact IPM or assurance match)
       const specifique = tarifs.find(
         (t) =>
           t.analyseId === analyseId &&
           ((ipmId && t.ipmId === ipmId) || (assuranceId && t.assuranceId === assuranceId))
       );
       if (specifique) return Number(specifique.prix);
+
+      // Fall back to generic type tariff
+      const type = ipmId ? 'IPM' : assuranceId ? 'ASSURANCE' : null;
+      if (type) {
+        const generique = tarifs.find(
+          (t) => t.analyseId === analyseId && t.typePriseEnCharge === type && !t.ipmId && !t.assuranceId
+        );
+        if (generique) return Number(generique.prix);
+      }
 
       return 0;
     },
