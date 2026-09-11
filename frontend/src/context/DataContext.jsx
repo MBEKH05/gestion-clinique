@@ -24,7 +24,7 @@ import {
 const DataContext = createContext(null);
 
 const CACHE_KEY = 'facturation_clinique_cache_v2';
-const CACHE_TTL_SECONDS = 300; // 5 minutes
+const CACHE_TTL_SECONDS = 3600;
 
 function readCache() {
   try {
@@ -199,6 +199,14 @@ export function DataProvider({ children }) {
   };
 
   // --- Tarifs ---
+  const reloadTarifs = async () => {
+    const { data } = await tarifsAPI.getAll();
+    const converted = (data.results || data).map(convertTarifFromAPI);
+    setTarifs(converted);
+    invalidateCache();
+    return converted;
+  };
+
   const addTarif = async (tarif) => {
     const { data } = await tarifsAPI.create(convertTarifToAPI(tarif));
     const converted = convertTarifFromAPI(data);
@@ -315,6 +323,7 @@ export function DataProvider({ children }) {
     deleteAssurance,
     activateAssurance,
     deactivateAssurance,
+    reloadTarifs,
     addTarif,
     updateTarif,
     deleteTarif,

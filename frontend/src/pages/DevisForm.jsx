@@ -8,7 +8,7 @@ import { formatMontant } from '../utils/devisUtils';
 export default function DevisForm({ isProforma: isProformaProp = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { analyses, ipms, assurances, categories, getPrixAnalyse, addDevis, updateDevis, addPatient, updatePatient } =
+  const { analyses, ipms, assurances, categories, getPrixAnalyse, reloadTarifs, addDevis, updateDevis, addPatient, updatePatient } =
     useData();
 
   const isEdit = !!id;
@@ -30,6 +30,10 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [existingPatientId, setExistingPatientId] = useState(null);
+
+  useEffect(() => {
+    if (!isEdit) reloadTarifs();
+  }, []);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -88,6 +92,17 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
 
   const handleRemoveLigne = (ligneId) => {
     setLignes((prev) => prev.filter((l) => l.id !== ligneId));
+  };
+
+  const handleRecalculerPrix = () => {
+    const ipm = typePriseEnCharge === 'IPM' ? ipmId : null;
+    const assurance = typePriseEnCharge === 'ASSURANCE' ? assuranceId : null;
+    setLignes((prev) =>
+      prev.map((l) => {
+        const nouveauPrix = getPrixAnalyse(l.analyseId, ipm, assurance);
+        return nouveauPrix > 0 ? { ...l, prix: nouveauPrix } : l;
+      })
+    );
   };
 
   const handleLigneChange = (ligneId, field, value) => {
@@ -320,7 +335,20 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
 
         <div className="card shadow-sm mb-4">
           <div className="card-body">
-            <h5 className="card-title">Lignes du devis</h5>
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <h5 className="card-title mb-0">Lignes du devis</h5>
+              {lignes.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-warning"
+                  onClick={handleRecalculerPrix}
+                  title="Recalculer les prix selon les tarifs actuels"
+                >
+                  <i className="bi bi-arrow-repeat me-1"></i>
+                  Mettre a jour les prix
+                </button>
+              )}
+            </div>
             <div className="table-responsive">
               <table className="table">
                 <thead>
