@@ -35,11 +35,6 @@ class StatistiqueController extends Controller
             ->whereBetween('date_creation', [$debut, $fin])
             ->get();
 
-        $nonRegles = 0;
-        $partiellementRegles = 0;
-        $regles = 0;
-        $montantTotal = 0.0;
-
         $groupes = [];
 
         foreach ($devisList as $devis) {
@@ -57,15 +52,6 @@ class StatistiqueController extends Controller
 
             $taux = is_numeric($devis->taux_couverture) ? (float) $devis->taux_couverture : 0.0;
             $montantCouvert = (float) $devis->total * (1 - ($taux / 100));
-
-            $montantTotal += $montantCouvert;
-
-            match ($devis->statut_paiement) {
-                'NON_REGLE' => $nonRegles++,
-                'PARTIELLEMENT_REGLE' => $partiellementRegles++,
-                'REGLE' => $regles++,
-                default => null,
-            };
 
             $key = $patient->type_prise_en_charge.':'.$entiteId;
 
@@ -123,13 +109,18 @@ class StatistiqueController extends Controller
 
         usort($factures, fn ($a, $b) => strcmp($a['entiteNom'], $b['entiteNom']));
 
+        // Les compteurs portent sur les factures (une par IPM/assurance), comme le tableau affiché.
+        $statistiques = fn (array $liste) => [
+            'nonRegles' => count(array_filter($liste, fn ($f) => $f['statutPaiement'] === 'NON_REGLE')),
+            'partiellementRegles' => count(array_filter($liste, fn ($f) => $f['statutPaiement'] === 'PARTIELLEMENT_REGLE')),
+            'regles' => count(array_filter($liste, fn ($f) => $f['statutPaiement'] === 'REGLE')),
+            'montantTotal' => round(array_sum(array_column($liste, 'montantCouvert')), 2),
+        ];
+
         return response()->json([
-            'statistiques' => [
-                'nonRegles' => $nonRegles,
-                'partiellementRegles' => $partiellementRegles,
-                'regles' => $regles,
-                'montantTotal' => round($montantTotal, 2),
-            ],
+            'statistiques' => $statistiques($factures),
+            'statistiquesIPM' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] === 'IPM'))),
+            'statistiquesAssurance' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] !== 'IPM'))),
             'factures' => $factures,
         ]);
     }

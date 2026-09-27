@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { statistiquesAPI } from '../api/endpoints';
 import { formatMontant } from '../utils/devisUtils';
 import SuiviFactures from '../components/SuiviFactures';
@@ -8,22 +8,30 @@ export default function Statistiques() {
   const now = new Date();
   const [mois, setMois] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
   const [annee, setAnnee] = useState(now.getFullYear());
-  const [factures, setFactures] = useState([]);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
-
-    const params =
+  const params = useMemo(
+    () =>
       periodeType === 'mois'
         ? { periode: 'mois', mois: Number(mois.split('-')[1]), annee: Number(mois.split('-')[0]) }
-        : { periode: 'annee', annee: Number(annee) };
+        : { periode: 'annee', annee: Number(annee) },
+    [periodeType, mois, annee]
+  );
 
-    statistiquesAPI
+  const load = useCallback(() => {
+    setLoading(true);
+    return statistiquesAPI
       .getPaiement(params)
-      .then(({ data }) => setFactures(data.factures || []))
+      .then(({ data }) => setData(data))
       .finally(() => setLoading(false));
-  }, [periodeType, mois, annee]);
+  }, [params]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const factures = useMemo(() => data?.factures || [], [data]);
 
   const { totalIPM, totalAssurance, parIPM, parAssurance } = useMemo(() => {
     const parIPM = factures
@@ -163,7 +171,11 @@ export default function Statistiques() {
 
       <div className="card shadow-sm">
         <div className="card-body">
-          <SuiviFactures />
+          {data ? (
+            <SuiviFactures data={data} params={params} onSaved={load} />
+          ) : (
+            <div className="text-center py-4"><div className="spinner-border text-primary"></div></div>
+          )}
         </div>
       </div>
     </div>

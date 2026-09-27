@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { statistiquesAPI, devisAPI } from '../api/endpoints';
+import { devisAPI } from '../api/endpoints';
 import { formatMontant } from '../utils/devisUtils';
 import { generatePDFListeFactures } from '../utils/pdfUtils';
 
@@ -9,43 +9,157 @@ const STATUTS = [
   { value: 'REGLE', label: 'Regle' },
 ];
 
-export default function SuiviFactures() {
-  const now = new Date();
-  const [mois, setMois] = useState(now.getMonth() + 1);
-  const [annee, setAnnee] = useState(now.getFullYear());
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+const calculerStatistiques = (factures) => ({
+  nonRegles: factures.filter((f) => f.statutPaiement === 'NON_REGLE').length,
+  partiellementRegles: factures.filter((f) => f.statutPaiement === 'PARTIELLEMENT_REGLE').length,
+  regles: factures.filter((f) => f.statutPaiement === 'REGLE').length,
+  montantTotal: factures.reduce((sum, f) => sum + Number(f.montantCouvert || 0), 0),
+});
+
+function SectionFactures({ titre, labelEntite, factures, params, modifications, onChange }) {
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const stats = calculerStatistiques(factures);
+
+  const getValue = (facture, field) => modifications[facture.id]?.[field] ?? facture[field] ?? '';
+
+  const facturesAffichees = filtreStatut
+    ? factures.filter((f) => getValue(f, 'statutPaiement') === filtreStatut)
+    : factures;
+
+  const cartes = [
+    { statut: 'NON_REGLE', label: 'Non regles', valeur: stats.nonRegles, couleur: 'danger' },
+    { statut: 'PARTIELLEMENT_REGLE', label: 'Partiellement regles', valeur: stats.partiellementRegles, couleur: 'warning' },
+    { statut: 'REGLE', label: 'Regles', valeur: stats.regles, couleur: 'success' },
+  ];
+
+  return (
+    <div className="mb-4">
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <h6 className="mb-0 fw-bold">{titre}</h6>
+        <button
+          className="btn btn-sm btn-outline-primary"
+          disabled={factures.length === 0}
+          onClick={() => generatePDFListeFactures(facturesAffichees, params.mois, params.annee, calculerStatistiques(facturesAffichees), titre)}
+        >
+          <i className="bi bi-file-earmark-pdf me-2"></i>Telecharger PDF
+        </button>
+      </div>
+
+      <div className="row g-3 mb-3">
+        {cartes.map((c) => (
+          <div className="col-md-3" key={c.statut}>
+            <div
+              className={`card border-${c.couleur} ${filtreStatut === c.statut ? `bg-${c.couleur} bg-opacity-10` : ''}`}
+              role="button"
+              title="Cliquer pour filtrer"
+              onClick={() => setFiltreStatut(filtreStatut === c.statut ? '' : c.statut)}
+            >
+              <div className="card-body">
+                <div className="text-muted small">{c.label}</div>
+                <div className={`fs-4 fw-bold text-${c.couleur}`}>{c.valeur}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="col-md-3">
+          <div className="card border-primary">
+            <div className="card-body">
+              <div className="text-muted small">Montant total</div>
+              <div className="fs-5 fw-bold text-primary">{formatMontant(stats.montantTotal)} FCFA</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="row g-2 mb-2">
+        <div className="col-md-3">
+          <select className="form-select form-select-sm" value={filtreStatut} onChange={(e) => setFiltreStatut(e.target.value)}>
+            <option value="">Tous les statuts</option>
+            {STATUTS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="table-responsive">
+        <table className="table table-bordered bg-white">
+          <thead>
+            <tr>
+              <th>N&deg; Facture</th>
+              <th>{labelEntite}</th>
+              <th>Montant couvert</th>
+              <th>Statut</th>
+              <th>Date paiement</th>
+              <th>Commentaire</th>
+            </tr>
+          </thead>
+          <tbody>
+            {facturesAffichees.map((f) => (
+              <tr key={f.id} className={modifications[f.id] ? 'table-warning' : ''}>
+                <td>{f.numeroFacture}</td>
+                <td>{f.entiteNom}</td>
+                <td>{formatMontant(f.montantCouvert)} FCFA</td>
+                <td>
+                  <select
+                    className="form-select form-select-sm"
+                    value={getValue(f, 'statutPaiement')}
+                    onChange={(e) => onChange(f.id, 'statutPaiement', e.target.value)}
+                  >
+                    {STATUTS.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <input
+                    type="date"
+                    className="form-control form-control-sm"
+                    value={getValue(f, 'datePaiement') || ''}
+                    onChange={(e) => onChange(f.id, 'datePaiement', e.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={getValue(f, 'commentairePaiement') || ''}
+                    onChange={(e) => onChange(f.id, 'commentairePaiement', e.target.value)}
+                  />
+                </td>
+              </tr>
+            ))}
+            {facturesAffichees.length === 0 && (
+              <tr>
+                <td colSpan={6} className="text-center text-muted py-3">
+                  Aucune facture pour cette periode.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export default function SuiviFactures({ data, params, onSaved }) {
   const [modifications, setModifications] = useState({});
   const [saving, setSaving] = useState(false);
 
-  const load = () => {
-    setLoading(true);
-    statistiquesAPI
-      .getPaiement({ mois, annee, periode: 'mois' })
-      .then(({ data }) => setData(data))
-      .finally(() => setLoading(false));
-  };
-
   useEffect(() => {
-    load();
     setModifications({});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mois, annee]);
+  }, [params]);
 
   const handleChange = (factureId, field, value) => {
     setModifications((prev) => ({
       ...prev,
       [factureId]: { ...prev[factureId], [field]: value },
     }));
-  };
-
-  const getValue = (facture, field) => {
-    const fieldMap = {
-      statutPaiement: 'statutPaiement',
-      datePaiement: 'datePaiement',
-      commentairePaiement: 'commentairePaiement',
-    };
-    return modifications[facture.id]?.[field] ?? facture[fieldMap[field]] ?? '';
   };
 
   const handleSave = async () => {
@@ -63,154 +177,46 @@ export default function SuiviFactures() {
         }
       }
       setModifications({});
-      load();
+      await onSaved();
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading || !data) {
-    return <div className="text-center py-4"><div className="spinner-border text-primary"></div></div>;
-  }
-
+  const facturesIPM = data.factures.filter((f) => f.typePriseEnCharge === 'IPM');
+  const facturesAssurance = data.factures.filter((f) => f.typePriseEnCharge !== 'IPM');
   const hasModifications = Object.keys(modifications).length > 0;
 
   return (
     <div>
       <h5 className="mb-3">Suivi des Factures</h5>
 
-      <div className="row g-2 mb-3">
-        <div className="col-md-3">
-          <select className="form-select" value={mois} onChange={(e) => setMois(Number(e.target.value))}>
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-md-3">
-          <input
-            type="number"
-            className="form-control"
-            value={annee}
-            onChange={(e) => setAnnee(Number(e.target.value))}
-          />
-        </div>
-      </div>
+      <SectionFactures
+        titre="Factures IPM"
+        labelEntite="IPM"
+        factures={facturesIPM}
+        params={params}
+        modifications={modifications}
+        onChange={handleChange}
+      />
 
-      <div className="row g-3 mb-3">
-        <div className="col-md-3">
-          <div className="card border-danger">
-            <div className="card-body">
-              <div className="text-muted small">Non regles</div>
-              <div className="fs-4 fw-bold text-danger">{data.statistiques.nonRegles}</div>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card border-warning">
-            <div className="card-body">
-              <div className="text-muted small">Partiellement regles</div>
-              <div className="fs-4 fw-bold text-warning">{data.statistiques.partiellementRegles}</div>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card border-success">
-            <div className="card-body">
-              <div className="text-muted small">Regles</div>
-              <div className="fs-4 fw-bold text-success">{data.statistiques.regles}</div>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card border-primary">
-            <div className="card-body">
-              <div className="text-muted small">Montant total</div>
-              <div className="fs-5 fw-bold text-primary">{formatMontant(data.statistiques.montantTotal)} FCFA</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <hr />
 
-      <div className="table-responsive">
-        <table className="table table-bordered bg-white">
-          <thead>
-            <tr>
-              <th>N&deg; Facture</th>
-              <th>IPM / Assurance</th>
-              <th>Montant couvert</th>
-              <th>Statut</th>
-              <th>Date paiement</th>
-              <th>Commentaire</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.factures.map((f) => {
-              const modified = !!modifications[f.id];
-              return (
-                <tr key={f.id} className={modified ? 'table-warning' : ''}>
-                  <td>{f.numeroFacture}</td>
-                  <td>{f.entiteNom}</td>
-                  <td>{formatMontant(f.montantCouvert)} FCFA</td>
-                  <td>
-                    <select
-                      className="form-select form-select-sm"
-                      value={getValue(f, 'statutPaiement')}
-                      onChange={(e) => handleChange(f.id, 'statutPaiement', e.target.value)}
-                    >
-                      {STATUTS.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    <input
-                      type="date"
-                      className="form-control form-control-sm"
-                      value={getValue(f, 'datePaiement') || ''}
-                      onChange={(e) => handleChange(f.id, 'datePaiement', e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      className="form-control form-control-sm"
-                      value={getValue(f, 'commentairePaiement') || ''}
-                      onChange={(e) => handleChange(f.id, 'commentairePaiement', e.target.value)}
-                    />
-                  </td>
-                </tr>
-              );
-            })}
-            {data.factures.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center text-muted py-3">
-                  Aucune facture pour cette periode.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <SectionFactures
+        titre="Factures Assurances"
+        labelEntite="Assurance"
+        factures={facturesAssurance}
+        params={params}
+        modifications={modifications}
+        onChange={handleChange}
+      />
 
-      <div className="d-flex gap-2">
-        {hasModifications && (
-          <button className="btn btn-success" onClick={handleSave} disabled={saving}>
-            {saving && <span className="spinner-border spinner-border-sm me-2"></span>}
-            Enregistrer les modifications
-          </button>
-        )}
-        <button
-          className="btn btn-outline-primary"
-          onClick={() => generatePDFListeFactures(data.factures, mois, annee, data.statistiques)}
-        >
-          <i className="bi bi-file-earmark-pdf me-2"></i>Telecharger PDF
+      {hasModifications && (
+        <button className="btn btn-success" onClick={handleSave} disabled={saving}>
+          {saving && <span className="spinner-border spinner-border-sm me-2"></span>}
+          Enregistrer les modifications
         </button>
-      </div>
+      )}
     </div>
   );
 }

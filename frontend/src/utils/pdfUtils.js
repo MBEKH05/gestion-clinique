@@ -258,11 +258,12 @@ export async function generatePDFDevisMensuel(rows, entiteNom, mois, typePriseEn
   doc.save(`devis-mensuel-${mois}.pdf`);
 }
 
-export async function generatePDFListeFactures(factures, mois, annee, statistiques) {
+export async function generatePDFListeFactures(factures, mois, annee, statistiques, titre = 'Factures') {
   await logoReady;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
-  let y = addHeader(doc, MARGIN + 4, 'SUIVI DES FACTURES MENSUELLES', `${mois}/${annee}`);
+  const periodeLabel = mois ? `${String(mois).padStart(2, '0')}/${annee}` : `Annee ${annee}`;
+  let y = addHeader(doc, MARGIN + 4, `SUIVI DES ${titre.toUpperCase()}`, periodeLabel);
 
   doc.setFontSize(9);
   doc.text(
@@ -311,7 +312,8 @@ export async function generatePDFListeFactures(factures, mois, annee, statistiqu
   doc.setFont(undefined, 'normal');
   doc.text('Genere par CLINIQUE SOPE NABY', MARGIN, PAGE_HEIGHT - 10);
 
-  doc.save(`suivi-factures-${annee}-${String(mois).padStart(2, '0')}.pdf`);
+  const slug = titre.toLowerCase().replace(/\s+/g, '-');
+  doc.save(`suivi-${slug}-${annee}${mois ? `-${String(mois).padStart(2, '0')}` : ''}.pdf`);
 }
 
 export async function generatePDFCatalogue(items, tarifs, categorie) {
