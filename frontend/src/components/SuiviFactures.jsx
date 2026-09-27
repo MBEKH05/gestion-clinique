@@ -34,8 +34,7 @@ function SectionFactures({ titre, labelEntite, factures, params, modifications, 
 
   return (
     <div className="mb-4">
-      <div className="d-flex justify-content-between align-items-center mb-2">
-        <h6 className="mb-0 fw-bold">{titre}</h6>
+      <div className="d-flex justify-content-end align-items-center mb-2">
         <button
           className="btn btn-sm btn-outline-primary"
           disabled={factures.length === 0}
@@ -150,6 +149,7 @@ function SectionFactures({ titre, labelEntite, factures, params, modifications, 
 export default function SuiviFactures({ data, params, onSaved }) {
   const [modifications, setModifications] = useState({});
   const [saving, setSaving] = useState(false);
+  const [onglet, setOnglet] = useState('IPM');
 
   useEffect(() => {
     setModifications({});
@@ -187,25 +187,39 @@ export default function SuiviFactures({ data, params, onSaved }) {
   const facturesAssurance = data.factures.filter((f) => f.typePriseEnCharge !== 'IPM');
   const hasModifications = Object.keys(modifications).length > 0;
 
+  const onglets = [
+    { value: 'IPM', label: 'IPM', titre: 'Factures IPM', labelEntite: 'IPM', factures: facturesIPM },
+    { value: 'ASSURANCE', label: 'Assurances', titre: 'Factures Assurances', labelEntite: 'Assurance', factures: facturesAssurance },
+  ];
+  const ongletActif = onglets.find((o) => o.value === onglet);
+
   return (
     <div>
-      <h5 className="mb-3">Suivi des Factures</h5>
+      <div className="d-flex flex-wrap align-items-center gap-3 mb-3">
+        <h5 className="mb-0">Suivi des Factures</h5>
+        <span className="badge bg-light text-dark border">
+          {params.mois ? `${String(params.mois).padStart(2, '0')}/${params.annee}` : `Annee ${params.annee}`}
+        </span>
+        <ul className="nav nav-pills">
+          {onglets.map((o) => (
+            <li className="nav-item" key={o.value}>
+              <button
+                type="button"
+                className={`nav-link ${onglet === o.value ? 'active' : ''}`}
+                onClick={() => setOnglet(o.value)}
+              >
+                {o.label} <span className="badge bg-secondary ms-1">{o.factures.length}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <SectionFactures
-        titre="Factures IPM"
-        labelEntite="IPM"
-        factures={facturesIPM}
-        params={params}
-        modifications={modifications}
-        onChange={handleChange}
-      />
-
-      <hr />
-
-      <SectionFactures
-        titre="Factures Assurances"
-        labelEntite="Assurance"
-        factures={facturesAssurance}
+        key={ongletActif.value}
+        titre={ongletActif.titre}
+        labelEntite={ongletActif.labelEntite}
+        factures={ongletActif.factures}
         params={params}
         modifications={modifications}
         onChange={handleChange}
