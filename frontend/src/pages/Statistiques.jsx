@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { statistiquesAPI } from '../api/endpoints';
 import { formatMontant } from '../utils/devisUtils';
 import SuiviFactures from '../components/SuiviFactures';
+import StatEntite from '../components/StatEntite';
+import { useData } from '../context/DataContext';
 
 export default function Statistiques() {
   const [periodeType, setPeriodeType] = useState('mois');
@@ -10,6 +12,18 @@ export default function Statistiques() {
   const [annee, setAnnee] = useState(now.getFullYear());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [entiteChoisie, setEntiteChoisie] = useState('');
+  const { ipms, assurances } = useData();
+
+  // Toutes les IPM et assurances de la plateforme, meme sans devis sur la periode.
+  const entites = useMemo(
+    () => [
+      ...(ipms || []).map((e) => ({ type: 'IPM', id: e.id, nom: e.nom })),
+      ...(assurances || []).map((e) => ({ type: 'ASSURANCE', id: e.id, nom: e.nom })),
+    ].sort((a, b) => String(a.nom).localeCompare(String(b.nom))),
+    [ipms, assurances]
+  );
+  const entite = entites.find((e) => `${e.type}:${e.id}` === entiteChoisie);
 
   const params = useMemo(
     () =>
@@ -81,9 +95,31 @@ export default function Statistiques() {
                 />
               )}
             </div>
+            <div className="col-md-4">
+              <label className="form-label small">IPM / Assurance</label>
+              <select className="form-select" value={entiteChoisie} onChange={(e) => setEntiteChoisie(e.target.value)}>
+                <option value="">Toutes (vue generale)</option>
+                <optgroup label="IPM">
+                  {entites.filter((e) => e.type === 'IPM').map((e) => (
+                    <option key={`IPM:${e.id}`} value={`IPM:${e.id}`}>
+                      {e.nom}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Assurances">
+                  {entites.filter((e) => e.type === 'ASSURANCE').map((e) => (
+                    <option key={`ASSURANCE:${e.id}`} value={`ASSURANCE:${e.id}`}>
+                      {e.nom}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
           </div>
         </div>
       </div>
+
+      {entite && !loading && <StatEntite entite={entite} factures={factures} params={params} />}
 
       {loading ? (
         <div className="text-center py-5">

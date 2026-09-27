@@ -9,22 +9,46 @@ const STATUTS = [
   { value: 'REGLE', label: 'Regle' },
 ];
 
+// Une facture regroupe plusieurs devis : elle compte dans un statut des qu'un de ses devis a ce statut.
+const contientStatut = (facture, statut) => (facture.repartition?.[statut] ?? 0) > 0;
+
 const calculerStatistiques = (factures) => ({
-  nonRegles: factures.filter((f) => f.statutPaiement === 'NON_REGLE').length,
-  partiellementRegles: factures.filter((f) => f.statutPaiement === 'PARTIELLEMENT_REGLE').length,
-  regles: factures.filter((f) => f.statutPaiement === 'REGLE').length,
+  nonRegles: factures.filter((f) => contientStatut(f, 'NON_REGLE')).length,
+  partiellementRegles: factures.filter((f) => contientStatut(f, 'PARTIELLEMENT_REGLE')).length,
+  regles: factures.filter((f) => contientStatut(f, 'REGLE')).length,
   montantTotal: factures.reduce((sum, f) => sum + Number(f.montantCouvert || 0), 0),
 });
 
+const REPARTITION_BADGES = [
+  { statut: 'NON_REGLE', abrev: 'NR', couleur: 'danger', label: 'non regle(s)' },
+  { statut: 'PARTIELLEMENT_REGLE', abrev: 'PR', couleur: 'warning', label: 'partiellement regle(s)' },
+  { statut: 'REGLE', abrev: 'R', couleur: 'success', label: 'regle(s)' },
+];
+
 function SectionFactures({ titre, labelEntite, factures, params, modifications, onChange }) {
   const [filtreStatut, setFiltreStatut] = useState('');
-  const stats = calculerStatistiques(factures);
 
-  const getValue = (facture, field) => modifications[facture.id]?.[field] ?? facture[field] ?? '';
+  const getValue = (facture, field) => {
+    const valeur = modifications[facture.id]?.[field] ?? facture[field] ?? '';
+    // Un statut absent ou inconnu est affiche "Non regle" : le filtre doit le traiter pareil.
+    if (field === 'statutPaiement' && !STATUTS.some((s) => s.value === valeur)) return 'NON_REGLE';
+    return valeur;
+  };
+
+  // Un statut modifie (non encore enregistre) s'appliquera a tous les devis de la facture.
+  const facturesAvecStatut = factures.map((f) => {
+    const statutModifie = modifications[f.id]?.statutPaiement;
+    const nbDevis = f.devis_ids?.length ?? 0;
+    const repartition = statutModifie
+      ? { NON_REGLE: 0, PARTIELLEMENT_REGLE: 0, REGLE: 0, [statutModifie]: nbDevis }
+      : f.repartition ?? { NON_REGLE: 0, PARTIELLEMENT_REGLE: 0, REGLE: 0, [getValue(f, 'statutPaiement')]: nbDevis };
+    return { ...f, statutPaiement: getValue(f, 'statutPaiement'), repartition };
+  });
+  const stats = calculerStatistiques(facturesAvecStatut);
 
   const facturesAffichees = filtreStatut
-    ? factures.filter((f) => getValue(f, 'statutPaiement') === filtreStatut)
-    : factures;
+    ? facturesAvecStatut.filter((f) => contientStatut(f, filtreStatut))
+    : facturesAvecStatut;
 
   const cartes = [
     { statut: 'NON_REGLE', label: 'Non regles', valeur: stats.nonRegles, couleur: 'danger' },
@@ -37,7 +61,7 @@ function SectionFactures({ titre, labelEntite, factures, params, modifications, 
       <div className="d-flex justify-content-end align-items-center mb-2">
         <button
           className="btn btn-sm btn-outline-primary"
-          disabled={factures.length === 0}
+          disabled={facturesAffichees.length === 0}
           onClick={() => generatePDFListeFactures(facturesAffichees, params.mois, params.annee, calculerStatistiques(facturesAffichees), titre)}
         >
           <i className="bi bi-file-earmark-pdf me-2"></i>Telecharger PDF
@@ -90,6 +114,7 @@ function SectionFactures({ titre, labelEntite, factures, params, modifications, 
               <th>N&deg; Facture</th>
               <th>{labelEntite}</th>
               <th>Montant couvert</th>
+              <th>Devis</th>
               <th>Statut</th>
               <th>Date paiement</th>
               <th>Commentaire</th>
@@ -101,6 +126,17 @@ function SectionFactures({ titre, labelEntite, factures, params, modifications, 
                 <td>{f.numeroFacture}</td>
                 <td>{f.entiteNom}</td>
                 <td>{formatMontant(f.montantCouvert)} FCFA</td>
+                <td className="text-nowrap">
+                  {REPARTITION_BADGES.filter((b) => f.repartition[b.statut] > 0).map((b) => (
+                    <span
+                      key={b.statut}
+                      className={`badge bg-${b.couleur} me-1`}
+                      title={`${f.repartition[b.statut]} devis ${b.label}`}
+                    >
+                      {f.repartition[b.statut]} {b.abrev}
+                    </span>
+                  ))}
+                </td>
                 <td>
                   <select
                     className="form-select form-select-sm"
@@ -134,8 +170,8 @@ function SectionFactures({ titre, labelEntite, factures, params, modifications, 
             ))}
             {facturesAffichees.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center text-muted py-3">
-                  Aucune facture pour cette periode.
+                <td colSpan={7} className="text-center text-muted py-3">
+                  {filtreStatut ? 'Aucune facture avec ce statut pour cette periode.' : 'Aucune facture pour cette periode.'}
                 </td>
               </tr>
             )}

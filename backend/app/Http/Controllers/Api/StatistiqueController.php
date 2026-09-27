@@ -29,8 +29,9 @@ class StatistiqueController extends Controller
         }
 
         $devisList = Devis::query()
-            ->select(['id', 'patient_id', 'total', 'taux_couverture', 'statut_paiement', 'date_paiement', 'commentaire_paiement'])
-            ->with(['patient:id,type_prise_en_charge,ipm_id,assurance_id'])
+            ->select(['id', 'numero', 'patient_id', 'total', 'taux_couverture', 'date_creation', 'statut_paiement', 'date_paiement', 'commentaire_paiement'])
+            ->with(['patient:id,nom_complet,matricule,type_prise_en_charge,ipm_id,assurance_id'])
+            ->orderBy('date_creation')
             ->where('is_proforma', false)
             ->whereBetween('date_creation', [$debut, $fin])
             ->get();
@@ -64,12 +65,26 @@ class StatistiqueController extends Controller
                     'datePaiement' => null,
                     'commentaires' => [],
                     'devisIds' => [],
+                    'devis' => [],
                 ];
             }
 
             $groupes[$key]['montantCouvert'] += $montantCouvert;
-            $groupes[$key]['statuts'][] = $devis->statut_paiement;
+            $statutDevis = $this->normaliserStatut($devis->statut_paiement);
+            $groupes[$key]['statuts'][] = $statutDevis;
             $groupes[$key]['devisIds'][] = $devis->id;
+            $groupes[$key]['devis'][] = [
+                'id' => $devis->id,
+                'numero' => $devis->numero,
+                'dateCreation' => optional($devis->date_creation)->toDateString(),
+                'patientNom' => $patient->nom_complet,
+                'matricule' => $patient->matricule,
+                'total' => round((float) $devis->total, 2),
+                'tauxCouverture' => $taux,
+                'montantCouvert' => round($montantCouvert, 2),
+                'statutPaiement' => $statutDevis,
+                'datePaiement' => optional($devis->date_paiement)->toDateString(),
+            ];
 
             if ($devis->date_paiement && (! $groupes[$key]['datePaiement'] || $devis->date_paiement->gt($groupes[$key]['datePaiement']))) {
                 $groupes[$key]['datePaiement'] = $devis->date_paiement;
@@ -104,16 +119,23 @@ class StatistiqueController extends Controller
                 'datePaiement' => optional($groupe['datePaiement'])->toDateString(),
                 'commentairePaiement' => implode(' | ', $groupe['commentaires']),
                 'devis_ids' => $groupe['devisIds'],
+                'devis' => $groupe['devis'],
+                // Nombre de devis par statut : une facture peut contenir des devis regles et non regles.
+                'repartition' => [
+                    'NON_REGLE' => count(array_keys($groupe['statuts'], 'NON_REGLE', true)),
+                    'PARTIELLEMENT_REGLE' => count(array_keys($groupe['statuts'], 'PARTIELLEMENT_REGLE', true)),
+                    'REGLE' => count(array_keys($groupe['statuts'], 'REGLE', true)),
+                ],
             ];
         }
 
         usort($factures, fn ($a, $b) => strcmp($a['entiteNom'], $b['entiteNom']));
 
-        // Les compteurs portent sur les factures (une par IPM/assurance), comme le tableau affiché.
+        // Une facture compte dans un statut des qu'elle contient au moins un devis dans ce statut (comme le filtre).
         $statistiques = fn (array $liste) => [
-            'nonRegles' => count(array_filter($liste, fn ($f) => $f['statutPaiement'] === 'NON_REGLE')),
-            'partiellementRegles' => count(array_filter($liste, fn ($f) => $f['statutPaiement'] === 'PARTIELLEMENT_REGLE')),
-            'regles' => count(array_filter($liste, fn ($f) => $f['statutPaiement'] === 'REGLE')),
+            'nonRegles' => count(array_filter($liste, fn ($f) => $f['repartition']['NON_REGLE'] > 0)),
+            'partiellementRegles' => count(array_filter($liste, fn ($f) => $f['repartition']['PARTIELLEMENT_REGLE'] > 0)),
+            'regles' => count(array_filter($liste, fn ($f) => $f['repartition']['REGLE'] > 0)),
             'montantTotal' => round(array_sum(array_column($liste, 'montantCouvert')), 2),
         ];
 
@@ -123,5 +145,22 @@ class StatistiqueController extends Controller
             'statistiquesAssurance' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] !== 'IPM'))),
             'factures' => $factures,
         ]);
+    }
+
+    /**
+     * Ramene un statut de paiement (vide, minuscules, accents, espaces...) a l'une des valeurs
+     * NON_REGLE / PARTIELLEMENT_REGLE / REGLE. Un devis sans statut est considere non regle.
+     */
+    private function normaliserStatut(?string $statut): string
+    {
+        $valeur = strtoupper(trim((string) $statut));
+        $valeur = str_replace(['É', 'é', 'È', 'è', ' ', '-'], ['E', 'E', 'E', 'E', '_', '_'], $valeur);
+
+        return match (true) {
+            str_contains($valeur, 'PARTIEL') => 'PARTIELLEMENT_REGLE',
+            str_starts_with($valeur, 'NON') || $valeur === '' => 'NON_REGLE',
+            $valeur === 'REGLE' || $valeur === 'PAYE' => 'REGLE',
+            default => 'NON_REGLE',
+        };
     }
 }
