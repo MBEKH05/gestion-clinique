@@ -67,6 +67,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('categories/{nom}/deactivate', [CategorieController::class, 'deactivate']);
 
         Route::get('statistiques/paiement', [StatistiqueController::class, 'paiement']);
+        Route::get('statistiques/factures-mensuelles', [StatistiqueController::class, 'facturesMensuelles']);
     });
 });
 

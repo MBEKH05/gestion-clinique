@@ -28,14 +28,97 @@ class StatistiqueController extends Controller
             $fin = $debut->copy()->endOfMonth()->endOfDay();
         }
 
-        $devisList = Devis::query()
-            ->select(['id', 'numero', 'patient_id', 'total', 'taux_couverture', 'date_creation', 'statut_paiement', 'date_paiement', 'commentaire_paiement'])
-            ->with(['patient:id,nom_complet,matricule,type_prise_en_charge,ipm_id,assurance_id'])
-            ->orderBy('date_creation')
-            ->where('is_proforma', false)
-            ->whereBetween('date_creation', [$debut, $fin])
+        $devisList = $this->devisFactures($debut, $fin)->get();
+        $factures = $this->grouperEnFactures($devisList, $annee, $mois);
+
+        usort($factures, fn ($a, $b) => strcmp($a['entiteNom'], $b['entiteNom']));
+
+        // Une facture compte dans un statut des qu'elle contient au moins un devis dans ce statut (comme le filtre).
+        $statistiques = fn (array $liste) => [
+            'nonRegles' => count(array_filter($liste, fn ($f) => $f['repartition']['NON_REGLE'] > 0)),
+            'partiellementRegles' => count(array_filter($liste, fn ($f) => $f['repartition']['PARTIELLEMENT_REGLE'] > 0)),
+            'regles' => count(array_filter($liste, fn ($f) => $f['repartition']['REGLE'] > 0)),
+            'montantTotal' => round(array_sum(array_column($liste, 'montantCouvert')), 2),
+        ];
+
+        return response()->json([
+            'statistiques' => $statistiques($factures),
+            'statistiquesIPM' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] === 'IPM'))),
+            'statistiquesAssurance' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] !== 'IPM'))),
+            'factures' => $factures,
+        ]);
+    }
+
+    /**
+     * Factures mensuelles (janvier a decembre) d'une IPM ou d'une assurance pour une annee.
+     * Les mois sans devis sont renvoyes avec un montant nul.
+     */
+    public function facturesMensuelles(Request $request)
+    {
+        $data = $request->validate([
+            'type' => 'required|in:IPM,ASSURANCE',
+            'entite_id' => 'required|string',
+            'annee' => 'nullable|integer|min:2000|max:2100',
+        ]);
+
+        $annee = (int) ($data['annee'] ?? Carbon::now()->year);
+        $colonne = $data['type'] === 'IPM' ? 'ipm_id' : 'assurance_id';
+
+        $devisList = $this->devisFactures(
+            Carbon::create($annee, 1, 1)->startOfDay(),
+            Carbon::create($annee, 12, 31)->endOfDay()
+        )
+            ->whereHas('patient', fn ($q) => $q
+                ->where('type_prise_en_charge', $data['type'])
+                ->where($colonne, $data['entite_id']))
             ->get();
 
+        $parMois = $devisList->groupBy(fn ($devis) => (int) $devis->date_creation->month);
+
+        $entiteNom = $data['type'] === 'IPM'
+            ? (Ipm::whereKey($data['entite_id'])->value('nom') ?? 'IPM inconnue')
+            : (Assurance::whereKey($data['entite_id'])->value('nom') ?? 'Assurance inconnue');
+
+        $factures = [];
+
+        foreach (range(1, 12) as $mois) {
+            $facture = $this->grouperEnFactures($parMois->get($mois, collect()), $annee, $mois)[0] ?? [
+                'numeroFacture' => FactureNumero::generate($mois, $annee, $data['entite_id']),
+                'entiteId' => $data['entite_id'],
+                'entiteNom' => $entiteNom,
+                'typePriseEnCharge' => $data['type'],
+                'montantCouvert' => 0,
+                'statutPaiement' => null,
+                'datePaiement' => null,
+                'commentairePaiement' => '',
+                'devis_ids' => [],
+                'repartition' => ['NON_REGLE' => 0, 'PARTIELLEMENT_REGLE' => 0, 'REGLE' => 0],
+            ];
+
+            $factures[] = ['mois' => $mois, 'id' => $data['type'].':'.$data['entite_id'].':'.$mois] + $facture;
+        }
+
+        return response()->json([
+            'entite' => ['type' => $data['type'], 'id' => $data['entite_id'], 'nom' => $entiteNom],
+            'annee' => $annee,
+            'factures' => $factures,
+        ]);
+    }
+
+    private function devisFactures(Carbon $debut, Carbon $fin)
+    {
+        return Devis::query()
+            ->select(['id', 'patient_id', 'total', 'taux_couverture', 'date_creation', 'statut_paiement', 'date_paiement', 'commentaire_paiement'])
+            ->with(['patient:id,type_prise_en_charge,ipm_id,assurance_id'])
+            ->where('is_proforma', false)
+            ->whereBetween('date_creation', [$debut, $fin]);
+    }
+
+    /**
+     * Regroupe des devis en factures : une facture par IPM / assurance.
+     */
+    private function grouperEnFactures($devisList, int $annee, ?int $mois): array
+    {
         $groupes = [];
 
         foreach ($devisList as $devis) {
@@ -65,26 +148,12 @@ class StatistiqueController extends Controller
                     'datePaiement' => null,
                     'commentaires' => [],
                     'devisIds' => [],
-                    'devis' => [],
                 ];
             }
 
             $groupes[$key]['montantCouvert'] += $montantCouvert;
-            $statutDevis = $this->normaliserStatut($devis->statut_paiement);
-            $groupes[$key]['statuts'][] = $statutDevis;
+            $groupes[$key]['statuts'][] = $this->normaliserStatut($devis->statut_paiement);
             $groupes[$key]['devisIds'][] = $devis->id;
-            $groupes[$key]['devis'][] = [
-                'id' => $devis->id,
-                'numero' => $devis->numero,
-                'dateCreation' => optional($devis->date_creation)->toDateString(),
-                'patientNom' => $patient->nom_complet,
-                'matricule' => $patient->matricule,
-                'total' => round((float) $devis->total, 2),
-                'tauxCouverture' => $taux,
-                'montantCouvert' => round($montantCouvert, 2),
-                'statutPaiement' => $statutDevis,
-                'datePaiement' => optional($devis->date_paiement)->toDateString(),
-            ];
 
             if ($devis->date_paiement && (! $groupes[$key]['datePaiement'] || $devis->date_paiement->gt($groupes[$key]['datePaiement']))) {
                 $groupes[$key]['datePaiement'] = $devis->date_paiement;
@@ -119,7 +188,6 @@ class StatistiqueController extends Controller
                 'datePaiement' => optional($groupe['datePaiement'])->toDateString(),
                 'commentairePaiement' => implode(' | ', $groupe['commentaires']),
                 'devis_ids' => $groupe['devisIds'],
-                'devis' => $groupe['devis'],
                 // Nombre de devis par statut : une facture peut contenir des devis regles et non regles.
                 'repartition' => [
                     'NON_REGLE' => count(array_keys($groupe['statuts'], 'NON_REGLE', true)),
@@ -129,22 +197,7 @@ class StatistiqueController extends Controller
             ];
         }
 
-        usort($factures, fn ($a, $b) => strcmp($a['entiteNom'], $b['entiteNom']));
-
-        // Une facture compte dans un statut des qu'elle contient au moins un devis dans ce statut (comme le filtre).
-        $statistiques = fn (array $liste) => [
-            'nonRegles' => count(array_filter($liste, fn ($f) => $f['repartition']['NON_REGLE'] > 0)),
-            'partiellementRegles' => count(array_filter($liste, fn ($f) => $f['repartition']['PARTIELLEMENT_REGLE'] > 0)),
-            'regles' => count(array_filter($liste, fn ($f) => $f['repartition']['REGLE'] > 0)),
-            'montantTotal' => round(array_sum(array_column($liste, 'montantCouvert')), 2),
-        ];
-
-        return response()->json([
-            'statistiques' => $statistiques($factures),
-            'statistiquesIPM' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] === 'IPM'))),
-            'statistiquesAssurance' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] !== 'IPM'))),
-            'factures' => $factures,
-        ]);
+        return $factures;
     }
 
     /**

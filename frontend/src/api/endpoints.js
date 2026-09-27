@@ -77,6 +77,7 @@ export const dashboardAPI = {
 
 export const statistiquesAPI = {
   getPaiement: (params) => api.get('/statistiques/paiement', { params }),
+  getFacturesMensuelles: (params) => api.get('/statistiques/factures-mensuelles', { params }),
 };
 
 export const facturesMensuellesAPI = {

@@ -264,7 +264,7 @@ const STATUT_PAIEMENT_LABELS = {
   REGLE: 'Regle',
 };
 
-export async function generatePDFListeFactures(factures, mois, annee, statistiques, titre = 'Factures') {
+export async function generatePDFListeFactures(factures, mois, annee, statistiques, titre = 'Factures', colonneEntite = 'IPM / Assurance') {
   await logoReady;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
@@ -288,7 +288,7 @@ export async function generatePDFListeFactures(factures, mois, annee, statistiqu
   doc.setFontSize(9);
   doc.text('N°', MARGIN + 2, y + 5);
   doc.text('Numero facture', MARGIN + 15, y + 5);
-  doc.text('IPM / Assurance', MARGIN + 60, y + 5);
+  doc.text(colonneEntite, MARGIN + 60, y + 5);
   doc.text('Montant (FCFA)', MARGIN + 120, y + 5);
   doc.text('Statut', PAGE_WIDTH - MARGIN - 5, y + 5, { align: 'right' });
   doc.setTextColor(0, 0, 0);
@@ -321,75 +321,6 @@ export async function generatePDFListeFactures(factures, mois, annee, statistiqu
 
   const slug = titre.toLowerCase().replace(/\s+/g, '-');
   doc.save(`suivi-${slug}-${annee}${mois ? `-${String(mois).padStart(2, '0')}` : ''}.pdf`);
-}
-
-export async function generatePDFStatEntite(entite, devis, stats, params) {
-  await logoReady;
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-
-  const periodeLabel = params.mois ? `${String(params.mois).padStart(2, '0')}/${params.annee}` : `Annee ${params.annee}`;
-  const typeLabel = entite.type === 'IPM' ? 'IPM' : 'ASSURANCE';
-  let y = addHeader(doc, MARGIN + 4, `STATISTIQUES ${typeLabel}`, [String(entite.nom ?? ''), periodeLabel]);
-
-  doc.setFontSize(9);
-  doc.setFont(undefined, 'normal');
-  doc.text(`Nombre de devis : ${stats.nbDevis}`, MARGIN, y);
-  doc.text(`Montant total devis : ${Math.round(stats.montantTotal)} FCFA`, MARGIN + 60, y);
-  doc.text(`Pris en charge : ${Math.round(stats.montantCouvert)} FCFA`, MARGIN + 125, y);
-  y += 5;
-  doc.text(
-    `Non regles : ${stats.nonRegles}   Partiellement regles : ${stats.partiellementRegles}   Regles : ${stats.regles}`,
-    MARGIN,
-    y
-  );
-  y += 8;
-
-  const cols = { num: MARGIN + 2, date: MARGIN + 30, patient: MARGIN + 52, total: MARGIN + 125, couvert: MARGIN + 150, statut: PAGE_WIDTH - MARGIN - 2 };
-  const drawEntete = () => {
-    doc.setFillColor(...HEADER_BLUE);
-    doc.setTextColor(255, 255, 255);
-    doc.rect(MARGIN, y, PAGE_WIDTH - MARGIN * 2, 7, 'F');
-    doc.setFont(undefined, 'bold');
-    doc.setFontSize(8);
-    doc.text('N° Devis', cols.num, y + 5);
-    doc.text('Date', cols.date, y + 5);
-    doc.text('Patient', cols.patient, y + 5);
-    doc.text('Total', cols.total, y + 5, { align: 'right' });
-    doc.text('Pris en ch.', cols.couvert, y + 5, { align: 'right' });
-    doc.text('Statut', cols.statut, y + 5, { align: 'right' });
-    doc.setTextColor(0, 0, 0);
-    doc.setFont(undefined, 'normal');
-    y += 9;
-  };
-  drawEntete();
-
-  devis.forEach((d) => {
-    if (y > PAGE_HEIGHT - 25) {
-      doc.addPage();
-      y = MARGIN;
-      drawEntete();
-    }
-    const date = d.dateCreation ? d.dateCreation.split('-').reverse().join('/') : '-';
-    doc.text(String(d.numero ?? ''), cols.num, y + 4);
-    doc.text(date, cols.date, y + 4);
-    doc.text(String(d.patientNom ?? '').slice(0, 32), cols.patient, y + 4);
-    doc.text(String(Math.round(Number(d.total) || 0)), cols.total, y + 4, { align: 'right' });
-    doc.text(String(Math.round(Number(d.montantCouvert) || 0)), cols.couvert, y + 4, { align: 'right' });
-    doc.text(STATUT_PAIEMENT_LABELS[d.statutPaiement] ?? 'Non regle', cols.statut, y + 4, { align: 'right' });
-    y += 6;
-  });
-
-  y += 4;
-  doc.setFont(undefined, 'bold');
-  doc.setFontSize(9);
-  doc.text(`TOTAL PRIS EN CHARGE : ${Math.round(stats.montantCouvert)} FCFA`, PAGE_WIDTH - MARGIN, y, { align: 'right' });
-
-  doc.setFontSize(8);
-  doc.setFont(undefined, 'normal');
-  doc.text('Genere par CLINIQUE SOPE NABY', MARGIN, PAGE_HEIGHT - 10);
-
-  const slug = String(entite.nom ?? 'entite').toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  doc.save(`stat-${slug}-${params.annee}${params.mois ? `-${String(params.mois).padStart(2, '0')}` : ''}.pdf`);
 }
 
 export async function generatePDFCatalogue(items, tarifs, categorie) {
