@@ -258,6 +258,12 @@ export async function generatePDFDevisMensuel(rows, entiteNom, mois, typePriseEn
   doc.save(`devis-mensuel-${mois}.pdf`);
 }
 
+const STATUT_PAIEMENT_LABELS = {
+  NON_REGLE: 'Non regle',
+  PARTIELLEMENT_REGLE: 'Partiellement regle',
+  REGLE: 'Regle',
+};
+
 export async function generatePDFListeFactures(factures, mois, annee, statistiques, titre = 'Factures') {
   await logoReady;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
@@ -272,7 +278,7 @@ export async function generatePDFListeFactures(factures, mois, annee, statistiqu
     y
   );
   y += 5;
-  doc.text(`Montant total : ${Math.round(statistiques.montantTotal)} FCFA`, MARGIN, y);
+  doc.text(`Montant total : ${Math.round(Number(statistiques.montantTotal) || 0)} FCFA`, MARGIN, y);
   y += 8;
 
   doc.setFillColor(...HEADER_BLUE);
@@ -296,11 +302,12 @@ export async function generatePDFListeFactures(factures, mois, annee, statistiqu
       y = MARGIN;
     }
     doc.text(String(idx + 1), MARGIN + 2, y + 4);
-    doc.text(f.numeroFacture, MARGIN + 15, y + 4);
-    doc.text(String(f.entiteNom).slice(0, 25), MARGIN + 60, y + 4);
-    doc.text(String(Math.round(f.montantCouvert)), MARGIN + 120, y + 4);
-    doc.text(f.statutPaiement, PAGE_WIDTH - MARGIN - 5, y + 4, { align: 'right' });
-    total += f.montantCouvert;
+    const montant = Number(f.montantCouvert) || 0;
+    doc.text(String(f.numeroFacture ?? ''), MARGIN + 15, y + 4);
+    doc.text(String(f.entiteNom ?? '').slice(0, 25), MARGIN + 60, y + 4);
+    doc.text(String(Math.round(montant)), MARGIN + 120, y + 4);
+    doc.text(STATUT_PAIEMENT_LABELS[f.statutPaiement] ?? 'Non regle', PAGE_WIDTH - MARGIN - 5, y + 4, { align: 'right' });
+    total += montant;
     y += 6;
   });
 
