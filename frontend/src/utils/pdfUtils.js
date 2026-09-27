@@ -264,62 +264,138 @@ const STATUT_PAIEMENT_LABELS = {
   REGLE: 'Regle',
 };
 
+// Montant avec separateur de milliers (espace simple : jsPDF n'affiche pas l'espace insecable de toLocaleString).
+const formatMontantPDF = (valeur) => String(Math.round(Number(valeur) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
 export async function generatePDFListeFactures(factures, mois, annee, statistiques, titre = 'Factures', colonneEntite = 'IPM / Assurance') {
   await logoReady;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const largeur = PAGE_WIDTH - MARGIN * 2;
 
-  const periodeLabel = mois ? `${String(mois).padStart(2, '0')}/${annee}` : `Annee ${annee}`;
-  let y = addHeader(doc, MARGIN + 4, `SUIVI DES ${titre.toUpperCase()}`, periodeLabel);
+  const periodeLabel = mois ? `Periode : ${String(mois).padStart(2, '0')}/${annee}` : `Periode : annee ${annee}`;
+  const dateEdition = `Edite le ${new Date().toLocaleDateString('fr-FR')}`;
+  // Titre court a droite de l'en-tete pour ne pas chevaucher le nom de la clinique.
+  let y = addHeader(doc, MARGIN + 4, 'SUIVI DES FACTURES', [periodeLabel, dateEdition]);
 
-  doc.setFontSize(9);
-  doc.text(
-    `Non regles : ${statistiques.nonRegles}   Partiellement regles : ${statistiques.partiellementRegles}   Regles : ${statistiques.regles}`,
-    MARGIN,
-    y
-  );
-  y += 5;
-  doc.text(`Montant total : ${Math.round(Number(statistiques.montantTotal) || 0)} FCFA`, MARGIN, y);
-  y += 8;
-
-  doc.setFillColor(...HEADER_BLUE);
-  doc.setTextColor(255, 255, 255);
-  doc.rect(MARGIN, y, PAGE_WIDTH - MARGIN * 2, 7, 'F');
+  // Bandeau titre (peut etre long : nom de l'IPM / assurance), coupe sur plusieurs lignes si besoin.
+  doc.setFontSize(12);
   doc.setFont(undefined, 'bold');
-  doc.setFontSize(9);
-  doc.text('N°', MARGIN + 2, y + 5);
-  doc.text('Numero facture', MARGIN + 15, y + 5);
-  doc.text(colonneEntite, MARGIN + 60, y + 5);
-  doc.text('Montant (FCFA)', MARGIN + 120, y + 5);
-  doc.text('Statut', PAGE_WIDTH - MARGIN - 5, y + 5, { align: 'right' });
+  const lignesTitre = doc.splitTextToSize(String(titre).toUpperCase(), largeur - 8);
+  const hauteurTitre = lignesTitre.length * 5.5 + 4;
+  doc.setFillColor(235, 241, 252);
+  doc.rect(MARGIN, y - 2, largeur, hauteurTitre, 'F');
+  doc.setTextColor(...BLUE);
+  doc.text(lignesTitre, PAGE_WIDTH / 2, y + 3.5, { align: 'center' });
   doc.setTextColor(0, 0, 0);
-  y += 9;
+  y += hauteurTitre + 4;
 
-  doc.setFont(undefined, 'normal');
+  // Resume : 4 cases
+  const cases = [
+    { label: 'Non regles', valeur: String(statistiques.nonRegles ?? 0), couleur: [220, 53, 69] },
+    { label: 'Partiellement regles', valeur: String(statistiques.partiellementRegles ?? 0), couleur: [230, 150, 0] },
+    { label: 'Regles', valeur: String(statistiques.regles ?? 0), couleur: [25, 135, 84] },
+    { label: 'Montant total', valeur: `${formatMontantPDF(statistiques.montantTotal)} FCFA`, couleur: BLUE },
+  ];
+  const ecart = 3;
+  const largeurCase = (largeur - ecart * (cases.length - 1)) / cases.length;
+  cases.forEach((c, i) => {
+    const x = MARGIN + i * (largeurCase + ecart);
+    doc.setDrawColor(...c.couleur);
+    doc.setLineWidth(0.4);
+    doc.rect(x, y, largeurCase, 14);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(c.label, x + 3, y + 5);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(...c.couleur);
+    doc.text(c.valeur, x + 3, y + 11);
+  });
+  doc.setTextColor(0, 0, 0);
+  y += 20;
+
+  // Tableau
+  const col = {
+    num: MARGIN + 2,
+    facture: MARGIN + 11,
+    entite: MARGIN + 52,
+    montant: MARGIN + 132,
+    statut: PAGE_WIDTH - MARGIN - 2,
+  };
+  const enteteTableau = () => {
+    doc.setFillColor(...HEADER_BLUE);
+    doc.rect(MARGIN, y, largeur, 7, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(9);
+    doc.text('N°', col.num, y + 5);
+    doc.text('Numero facture', col.facture, y + 5);
+    doc.text(colonneEntite, col.entite, y + 5);
+    doc.text('Montant (FCFA)', col.montant, y + 5, { align: 'right' });
+    doc.text('Statut', col.statut, y + 5, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+    doc.setFont(undefined, 'normal');
+    y += 7;
+  };
+  enteteTableau();
+
   let total = 0;
+  doc.setFontSize(9);
   factures.forEach((f, idx) => {
     if (y > PAGE_HEIGHT - 30) {
       doc.addPage();
-      y = MARGIN;
+      y = MARGIN + 5;
+      enteteTableau();
+      doc.setFontSize(9);
     }
-    doc.text(String(idx + 1), MARGIN + 2, y + 4);
+    if (idx % 2 === 1) {
+      doc.setFillColor(245, 247, 250);
+      doc.rect(MARGIN, y, largeur, 7, 'F');
+    }
     const montant = Number(f.montantCouvert) || 0;
-    doc.text(String(f.numeroFacture ?? ''), MARGIN + 15, y + 4);
-    doc.text(String(f.entiteNom ?? '').slice(0, 25), MARGIN + 60, y + 4);
-    doc.text(String(Math.round(montant)), MARGIN + 120, y + 4);
-    doc.text(STATUT_PAIEMENT_LABELS[f.statutPaiement] ?? 'Non regle', PAGE_WIDTH - MARGIN - 5, y + 4, { align: 'right' });
+    const nom = doc.splitTextToSize(String(f.entiteNom ?? ''), col.montant - col.entite - 32)[0] ?? '';
+    doc.text(String(idx + 1), col.num, y + 5);
+    doc.text(String(f.numeroFacture ?? ''), col.facture, y + 5);
+    doc.text(nom, col.entite, y + 5);
+    doc.text(formatMontantPDF(montant), col.montant, y + 5, { align: 'right' });
+    doc.text(STATUT_PAIEMENT_LABELS[f.statutPaiement] ?? 'Non regle', col.statut, y + 5, { align: 'right' });
+    doc.setDrawColor(225, 225, 225);
+    doc.setLineWidth(0.2);
+    doc.line(MARGIN, y + 7, PAGE_WIDTH - MARGIN, y + 7);
     total += montant;
-    y += 6;
+    y += 7;
   });
 
-  y += 4;
+  if (factures.length === 0) {
+    doc.setTextColor(120, 120, 120);
+    doc.text('Aucune facture.', PAGE_WIDTH / 2, y + 6, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 8;
+  }
+
+  // Total
+  y += 3;
+  doc.setFillColor(235, 241, 252);
+  doc.rect(MARGIN, y, largeur, 8, 'F');
   doc.setFont(undefined, 'bold');
-  doc.text(`TOTAL GENERAL : ${Math.round(total)} FCFA`, PAGE_WIDTH - MARGIN, y, { align: 'right' });
+  doc.setFontSize(10);
+  doc.text('TOTAL GENERAL', col.facture, y + 5.5);
+  doc.text(`${formatMontantPDF(total)} FCFA`, col.montant, y + 5.5, { align: 'right' });
 
-  doc.setFontSize(8);
-  doc.setFont(undefined, 'normal');
-  doc.text('Genere par CLINIQUE SOPE NABY', MARGIN, PAGE_HEIGHT - 10);
+  // Pied de page sur chaque page
+  const nbPages = doc.getNumberOfPages();
+  for (let i = 1; i <= nbPages; i += 1) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(120, 120, 120);
+    doc.text('Genere par CLINIQUE SOPE NABY', MARGIN, PAGE_HEIGHT - 10);
+    doc.text(`Page ${i} / ${nbPages}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 10, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+  }
 
-  const slug = titre.toLowerCase().replace(/\s+/g, '-');
+  const slug = String(titre).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   doc.save(`suivi-${slug}-${annee}${mois ? `-${String(mois).padStart(2, '0')}` : ''}.pdf`);
 }
 
