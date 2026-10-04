@@ -90,7 +90,7 @@ export default function PatientsList() {
                   <th>Nom complet</th>
                   <th>Matricule</th>
                   <th>Type</th>
-                  <th>IPM / Assurance</th>
+                  <th>IPM / Assurance / Caisse</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -103,7 +103,11 @@ export default function PatientsList() {
                       <span className="badge bg-info text-dark">{p.typePriseEnCharge}</span>
                     </td>
                     <td>
-                      {p.typePriseEnCharge === 'IPM' ? ipmMap.get(p.ipmId) || '-' : assuranceMap.get(p.assuranceId) || '-'}
+                      {p.typePriseEnCharge === 'CAISSE'
+                        ? 'Caisse'
+                        : p.typePriseEnCharge === 'IPM'
+                          ? ipmMap.get(p.ipmId) || '-'
+                          : assuranceMap.get(p.assuranceId) || '-'}
                     </td>
                     <td>
                       <Link to={`/patients/${p.id}/modifier`} className="btn btn-sm btn-outline-primary me-2">

@@ -50,8 +50,8 @@ class PatientController extends Controller
         }
 
         $type = $request->input('type_prise_en_charge');
-        if (! in_array($type, ['IPM', 'ASSURANCE'], true)) {
-            return response()->json(['detail' => 'type_prise_en_charge doit etre IPM ou ASSURANCE.'], 400);
+        if (! in_array($type, ['IPM', 'ASSURANCE', 'CAISSE'], true)) {
+            return response()->json(['detail' => 'type_prise_en_charge doit etre IPM, ASSURANCE ou CAISSE.'], 400);
         }
 
         $patient = Patient::create([

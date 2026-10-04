@@ -279,7 +279,13 @@ export function DataProvider({ children }) {
 
   // --- Utilitaires ---
   const getPrixAnalyse = useCallback(
-    (analyseId, ipmId, assuranceId) => {
+    (analyseId, ipmId, assuranceId, typePriseEnCharge) => {
+      // Caisse : grille de prix unique (tarifs de type CAISSE)
+      if (typePriseEnCharge === 'CAISSE') {
+        const tarifCaisse = tarifs.find((t) => t.analyseId === analyseId && t.typePriseEnCharge === 'CAISSE');
+        return tarifCaisse ? Number(tarifCaisse.prix) : 0;
+      }
+
       // Specific tariff first (exact IPM or assurance match)
       const specifique = tarifs.find(
         (t) =>

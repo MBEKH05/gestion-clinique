@@ -98,6 +98,7 @@ export default function PatientsForm() {
               >
                 <option value="IPM">IPM</option>
                 <option value="ASSURANCE">Assurance</option>
+                <option value="CAISSE">Caisse</option>
               </select>
             </div>
 
@@ -115,7 +116,7 @@ export default function PatientsForm() {
                     ))}
                 </select>
               </div>
-            ) : (
+            ) : typePriseEnCharge === 'ASSURANCE' ? (
               <div className="mb-3">
                 <label className="form-label">Assurance</label>
                 <select
@@ -134,7 +135,7 @@ export default function PatientsForm() {
                     ))}
                 </select>
               </div>
-            )}
+            ) : null}
 
             <div className="d-flex gap-2">
               <button type="submit" className="btn btn-primary" disabled={saving}>

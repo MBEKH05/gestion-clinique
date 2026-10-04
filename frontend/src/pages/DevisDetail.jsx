@@ -38,7 +38,9 @@ export default function DevisDetail() {
   const entiteNom =
     patient?.typePriseEnCharge === 'IPM'
       ? ipms.find((i) => i.id === patient.ipmId)?.nom
-      : assurances.find((a) => a.id === patient?.assuranceId)?.nom;
+      : patient?.typePriseEnCharge === 'ASSURANCE'
+        ? assurances.find((a) => a.id === patient?.assuranceId)?.nom
+        : null;
 
   const lignesParCategorie = {};
   devis.lignes.forEach((l) => {

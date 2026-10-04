@@ -79,7 +79,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
   }, [lignes]);
 
   const handleAddAnalyse = (analyse) => {
-    const prix = getPrixAnalyse(analyse.id, typePriseEnCharge === 'IPM' ? ipmId : null, typePriseEnCharge === 'ASSURANCE' ? assuranceId : null);
+    const prix = getPrixAnalyse(analyse.id, typePriseEnCharge === 'IPM' ? ipmId : null, typePriseEnCharge === 'ASSURANCE' ? assuranceId : null, typePriseEnCharge);
     const newLigne = {
       id: `tmp-${Date.now()}`,
       analyseId: analyse.id,
@@ -102,7 +102,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
     const assurance = typePriseEnCharge === 'ASSURANCE' ? assuranceId : null;
     setLignes((prev) =>
       prev.map((l) => {
-        const nouveauPrix = getPrixAnalyse(l.analyseId, ipm, assurance);
+        const nouveauPrix = getPrixAnalyse(l.analyseId, ipm, assurance, typePriseEnCharge);
         return nouveauPrix > 0 ? { ...l, prix: nouveauPrix } : l;
       })
     );
@@ -229,6 +229,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
                 >
                   <option value="IPM">IPM</option>
                   <option value="ASSURANCE">Assurance</option>
+                  <option value="CAISSE">Caisse</option>
                 </select>
               </div>
               {typePriseEnCharge === 'IPM' ? (
@@ -243,7 +244,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
                     ))}
                   </select>
                 </div>
-              ) : (
+              ) : typePriseEnCharge === 'ASSURANCE' ? (
                 <div className="col-md-4">
                   <label className="form-label">Assurance</label>
                   <select
@@ -260,7 +261,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
                     ))}
                   </select>
                 </div>
-              )}
+              ) : null}
               <div className="col-md-4">
                 <label className="form-label">Souscripteur (optionnel)</label>
                 <input
@@ -307,7 +308,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
             </p>
             <div className="row g-2" style={{ maxHeight: 300, overflowY: 'auto' }}>
               {analysesFiltrees.map((a) => {
-                const prix = getPrixAnalyse(a.id, typePriseEnCharge === 'IPM' ? ipmId : null, typePriseEnCharge === 'ASSURANCE' ? assuranceId : null);
+                const prix = getPrixAnalyse(a.id, typePriseEnCharge === 'IPM' ? ipmId : null, typePriseEnCharge === 'ASSURANCE' ? assuranceId : null, typePriseEnCharge);
                 const nbDejaAjoutee = lignesCountByAnalyse.get(a.id) || 0;
                 const dejaAjoutee = nbDejaAjoutee > 0;
                 return (
