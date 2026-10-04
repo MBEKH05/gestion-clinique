@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DevisController;
 use App\Http\Controllers\Api\FactureMensuelleController;
 use App\Http\Controllers\Api\IpmController;
+use App\Http\Controllers\Api\MedicamentController;
 use App\Http\Controllers\Api\Lab\LabAuthController;
 use App\Http\Controllers\Api\Lab\LabDocumentAnnexeController;
 use App\Http\Controllers\Api\Lab\LabDossierController;
@@ -55,6 +56,8 @@ Route::middleware('auth:api')->group(function () {
     Route::middleware('admin')->delete('devis/{id}', [DevisController::class, 'destroy']);
 
     Route::get('dashboard-stats', [DashboardController::class, 'stats']);
+
+    Route::get('medicaments/suivi', [MedicamentController::class, 'suivi']);
 
     Route::get('factures-mensuelles/numero', [FactureMensuelleController::class, 'numero']);
 

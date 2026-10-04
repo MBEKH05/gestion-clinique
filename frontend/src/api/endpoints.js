@@ -71,6 +71,10 @@ export const categoriesAPI = {
   deactivate: (nom) => api.post(`/categories/${nom}/deactivate`),
 };
 
+export const medicamentsAPI = {
+  getSuivi: (params) => api.get('/medicaments/suivi', { params }),
+};
+
 export const dashboardAPI = {
   getStats: () => api.get('/dashboard-stats'),
 };

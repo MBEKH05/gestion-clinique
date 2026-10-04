@@ -399,6 +399,145 @@ export async function generatePDFListeFactures(factures, mois, annee, statistiqu
   doc.save(`suivi-${slug}-${annee}${mois ? `-${String(mois).padStart(2, '0')}` : ''}.pdf`);
 }
 
+const TYPE_LABELS_PDF = { IPM: 'IPM', ASSURANCE: 'Assurance', CAISSE: 'Caisse' };
+
+// Tracabilite des medicaments : resume, quantites par jour, par medicament, puis detail des ventes.
+export async function generatePDFSuiviMedicaments(data, filtres = {}) {
+  await logoReady;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const largeur = PAGE_WIDTH - MARGIN * 2;
+  const jj = (iso) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '-');
+
+  const sousTitres = [`Du ${jj(data.periode.debut)} au ${jj(data.periode.fin)}`];
+  if (filtres.nomMedicament) sousTitres.push(`Medicament : ${filtres.nomMedicament}`.slice(0, 45));
+  if (filtres.type) sousTitres.push(`Prise en charge : ${filtres.type}`);
+  let y = addHeader(doc, MARGIN + 4, 'SUIVI DES MEDICAMENTS', sousTitres);
+
+  const r = data.resume;
+  const cases = [
+    ['Quantite vendue', String(r.quantiteTotale)],
+    ['Montant total', `${formatMontantPDF(r.montantTotal)} FCFA`],
+    ['Medicaments', String(r.nbMedicaments)],
+    ['Devis', String(r.nbDevis)],
+  ];
+  const lc = (largeur - 9) / 4;
+  cases.forEach(([label, valeur], i) => {
+    const x = MARGIN + i * (lc + 3);
+    doc.setDrawColor(...BLUE);
+    doc.setLineWidth(0.4);
+    doc.rect(x, y, lc, 13);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(label, x + 3, y + 5);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(...BLUE);
+    doc.text(valeur, x + 3, y + 10.5);
+  });
+  doc.setTextColor(0, 0, 0);
+  y += 19;
+
+  // colonnes : [titre, x, alignement]
+  const tableau = (titre, colonnes, lignes) => {
+    if (y > PAGE_HEIGHT - 40) {
+      doc.addPage();
+      y = MARGIN + 5;
+    }
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...BLUE);
+    doc.text(titre, MARGIN, y);
+    doc.setTextColor(0, 0, 0);
+    y += 3;
+    const entete = () => {
+      doc.setFillColor(...HEADER_BLUE);
+      doc.rect(MARGIN, y, largeur, 6.5, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(8);
+      colonnes.forEach(([t, x, align]) => doc.text(t, x, y + 4.5, align ? { align } : undefined));
+      doc.setTextColor(0, 0, 0);
+      doc.setFont(undefined, 'normal');
+      y += 6.5;
+    };
+    entete();
+    lignes.forEach((ligne, idx) => {
+      if (y > PAGE_HEIGHT - 22) {
+        doc.addPage();
+        y = MARGIN + 5;
+        entete();
+      }
+      if (idx % 2 === 1) {
+        doc.setFillColor(245, 247, 250);
+        doc.rect(MARGIN, y, largeur, 6, 'F');
+      }
+      doc.setFontSize(8);
+      colonnes.forEach(([, x, align, maxLargeur], i) => {
+        let texte = String(ligne[i] ?? '');
+        if (maxLargeur) texte = doc.splitTextToSize(texte, maxLargeur)[0] ?? '';
+        doc.text(texte, x, y + 4.2, align ? { align } : undefined);
+      });
+      y += 6;
+    });
+    if (lignes.length === 0) {
+      doc.setTextColor(120, 120, 120);
+      doc.text('Aucune vente.', MARGIN + 2, y + 4.5);
+      doc.setTextColor(0, 0, 0);
+      y += 6;
+    }
+    y += 6;
+  };
+
+  const D = PAGE_WIDTH - MARGIN - 2;
+  tableau(
+    'Ventes par jour',
+    [['Date', MARGIN + 2], ['Quantite', MARGIN + 80, 'right'], ['Medicaments', MARGIN + 115, 'right'], ['Devis', MARGIN + 140, 'right'], ['Montant (FCFA)', D, 'right']],
+    data.parJour.map((j) => [jj(j.jour), j.quantite, j.nbMedicaments, j.nbDevis, formatMontantPDF(j.montant)])
+  );
+
+  tableau(
+    'Ventes par medicament',
+    [['Medicament', MARGIN + 2, null, 85], ['Quantite', MARGIN + 110, 'right'], ['Jours', MARGIN + 128, 'right'], ['Devis', MARGIN + 145, 'right'], ['Montant (FCFA)', D, 'right']],
+    data.parMedicament.map((m) => [m.medicament, m.quantite, m.nbJours, m.nbDevis, formatMontantPDF(m.montant)])
+  );
+
+  tableau(
+    'Detail des ventes',
+    [
+      ['Date', MARGIN + 1],
+      ['N° devis', MARGIN + 17],
+      ['Medicament', MARGIN + 37, null, 48],
+      ['Qte', MARGIN + 94, 'right'],
+      ['Montant', MARGIN + 113, 'right'],
+      ['Patient', MARGIN + 117, null, 37],
+      ['Prise en charge', MARGIN + 156, null, 23],
+    ],
+    data.details.map((d) => [
+      jj(d.date),
+      d.devisNumero,
+      d.medicament,
+      d.quantite,
+      formatMontantPDF(d.montant),
+      d.patientNom || '-',
+      d.typePriseEnCharge === 'CAISSE' ? 'Caisse' : d.entiteNom || TYPE_LABELS_PDF[d.typePriseEnCharge] || '-',
+    ])
+  );
+
+  const nbPages = doc.getNumberOfPages();
+  for (let i = 1; i <= nbPages; i += 1) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(120, 120, 120);
+    doc.text('Genere par CLINIQUE SOPE NABY', MARGIN, PAGE_HEIGHT - 10);
+    doc.text(`Page ${i} / ${nbPages}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 10, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  doc.save(`suivi-medicaments-${data.periode.debut}-au-${data.periode.fin}.pdf`);
+}
+
 export async function generatePDFCatalogue(items, tarifs, categorie) {
   await logoReady;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
