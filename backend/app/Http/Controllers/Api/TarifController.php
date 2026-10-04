@@ -31,8 +31,8 @@ class TarifController extends Controller
         $prix = Sanitizer::validateNumeric($request->input('prix', 0), 0, 1000000);
 
         $type = $request->input('type_prise_en_charge');
-        if ($type !== null && ! in_array($type, ['IPM', 'ASSURANCE'], true)) {
-            return response()->json(['detail' => 'type_prise_en_charge doit etre IPM ou ASSURANCE.'], 400);
+        if ($type !== null && ! in_array($type, ['IPM', 'ASSURANCE', 'CAISSE'], true)) {
+            return response()->json(['detail' => 'type_prise_en_charge doit etre IPM, ASSURANCE ou CAISSE.'], 400);
         }
 
         $tarif = Tarif::create([
@@ -41,6 +41,7 @@ class TarifController extends Controller
             'type_prise_en_charge' => $type,
             'ipm_id' => $type === 'IPM' ? null : $request->input('ipm'),
             'assurance_id' => $type === 'ASSURANCE' ? null : $request->input('assurance'),
+            'caisse_id' => $type === 'CAISSE' ? null : $request->input('caisse'),
             'prix' => $prix,
         ]);
 
@@ -70,6 +71,10 @@ class TarifController extends Controller
 
         if ($request->has('assurance')) {
             $tarif->assurance_id = $request->input('assurance');
+        }
+
+        if ($request->has('caisse')) {
+            $tarif->caisse_id = $request->input('caisse');
         }
 
         if ($request->has('analyse')) {

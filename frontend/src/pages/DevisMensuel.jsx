@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useData } from '../context/DataContext';
+import { TYPES_PRISE_EN_CHARGE, getTypePriseEnCharge } from '../utils/priseEnCharge';
 import { facturesMensuellesAPI, devisAPI } from '../api/endpoints';
 import { convertDevisFromAPI } from '../utils/apiConverters';
 import { formatMontant } from '../utils/devisUtils';
@@ -20,18 +21,23 @@ function formatPeriodeMois(mois) {
 }
 
 export default function DevisMensuel() {
-  const { ipms, assurances } = useData();
+  const { ipms, assurances, caisses } = useData();
   const [mois, setMois] = useState(moisCourant);
   const [typePriseEnCharge, setTypePriseEnCharge] = useState('IPM');
   const [ipmId, setIpmId] = useState('');
   const [assuranceId, setAssuranceId] = useState('');
+  const [caisseId, setCaisseId] = useState('');
 
   const [results, setResults] = useState(null);
   const [numeroFacture, setNumeroFacture] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const entiteId = typePriseEnCharge === 'IPM' ? ipmId : assuranceId;
-  const entite = typePriseEnCharge === 'IPM' ? ipms.find((i) => i.id === ipmId) : assurances.find((a) => a.id === assuranceId);
+  const listes = { ipms, assurances, caisses };
+  const entiteIds = { IPM: ipmId, ASSURANCE: assuranceId, CAISSE: caisseId };
+  const setEntiteIds = { IPM: setIpmId, ASSURANCE: setAssuranceId, CAISSE: setCaisseId };
+  const typeChoisi = getTypePriseEnCharge(typePriseEnCharge);
+  const entiteId = entiteIds[typeChoisi.value];
+  const entite = (listes[typeChoisi.listKey] || []).find((e) => e.id === entiteId);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -95,40 +101,29 @@ export default function DevisMensuel() {
                   value={typePriseEnCharge}
                   onChange={(e) => setTypePriseEnCharge(e.target.value)}
                 >
-                  <option value="IPM">IPM</option>
-                  <option value="ASSURANCE">Assurance</option>
+                  {TYPES_PRISE_EN_CHARGE.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
                 </select>
               </div>
-              {typePriseEnCharge === 'IPM' ? (
-                <div className="mb-3">
-                  <label className="form-label">IPM</label>
-                  <select className="form-select" value={ipmId} onChange={(e) => setIpmId(e.target.value)} required>
-                    <option value="">-- Selectionner --</option>
-                    {ipms.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.nom}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="mb-3">
-                  <label className="form-label">Assurance</label>
-                  <select
-                    className="form-select"
-                    value={assuranceId}
-                    onChange={(e) => setAssuranceId(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Selectionner --</option>
-                    {assurances.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.nom}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div className="mb-3">
+                <label className="form-label">{typeChoisi.label}</label>
+                <select
+                  className="form-select"
+                  value={entiteIds[typeChoisi.value]}
+                  onChange={(e) => setEntiteIds[typeChoisi.value](e.target.value)}
+                  required
+                >
+                  <option value="">-- Selectionner --</option>
+                  {(listes[typeChoisi.listKey] || []).map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <button type="submit" className="btn btn-primary" disabled={loading}>
                 {loading && <span className="spinner-border spinner-border-sm me-2"></span>}
                 Rechercher
@@ -184,7 +179,7 @@ export default function DevisMensuel() {
                     <strong>Periode :</strong> {formatPeriodeMois(mois)}
                   </div>
                   <div className="small">
-                    <strong>Type :</strong> {typePriseEnCharge === 'IPM' ? 'IPM' : 'Assurance'}
+                    <strong>Type :</strong> {typeChoisi.label}
                   </div>
                   <div className="small">
                     <strong>Nombre de devis :</strong> {results.length}

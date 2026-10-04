@@ -34,6 +34,16 @@ export const assurancesAPI = {
   deactivate: (id) => api.post(`/assurances/${id}/deactivate`),
 };
 
+export const caissesAPI = {
+  getAll: () => api.get('/caisses', { params: { page_size: 1000 } }),
+  get: (id) => api.get(`/caisses/${id}`),
+  create: (data) => api.post('/caisses', data),
+  update: (id, data) => api.put(`/caisses/${id}`, data),
+  remove: (id) => api.delete(`/caisses/${id}`),
+  activate: (id) => api.post(`/caisses/${id}/activate`),
+  deactivate: (id) => api.post(`/caisses/${id}/deactivate`),
+};
+
 export const tarifsAPI = {
   getAll: () => api.get('/tarifs', { params: { page_size: 1000 } }),
   getFresh: () => api.get('/tarifs', { params: { page_size: 1000, _t: Date.now() } }),

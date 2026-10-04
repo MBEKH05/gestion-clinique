@@ -213,7 +213,7 @@ export async function generatePDFDevisMensuel(rows, entiteNom, mois, typePriseEn
   await logoReady;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
-  const typeLabel = typePriseEnCharge === 'IPM' ? 'IPM' : 'Assurance';
+  const typeLabel = { IPM: 'IPM', ASSURANCE: 'Assurance', CAISSE: 'Caisse' }[typePriseEnCharge] ?? typePriseEnCharge;
   let y = addHeader(doc, MARGIN + 4, `FACTURE MENSUELLE - ${(entiteNom || '').toUpperCase()}`, [
     `N° Facture : ${numeroFacture}`,
     `Periode : ${formatPeriodeMois(mois)}`,
@@ -435,7 +435,7 @@ export async function generatePDFCatalogue(items, tarifs, categorie) {
       y = MARGIN + 4;
     }
     const tarifItem = (tarifs || []).find(
-      (t) => t.analyseId === item.id && !t.ipmId && !t.assuranceId
+      (t) => t.analyseId === item.id && !t.ipmId && !t.assuranceId && !t.caisseId
     );
     const prix = tarifItem ? Math.round(Number(tarifItem.prix)) : 0;
 

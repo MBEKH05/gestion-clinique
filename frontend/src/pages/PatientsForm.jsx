@@ -3,11 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { patientsAPI } from '../api/endpoints';
 import { convertPatientFromAPI } from '../utils/apiConverters';
+import { TYPES_PRISE_EN_CHARGE, getTypePriseEnCharge } from '../utils/priseEnCharge';
 
 export default function PatientsForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { ipms, assurances, addPatient, updatePatient } = useData();
+  const { ipms, assurances, caisses, addPatient, updatePatient } = useData();
   const isEdit = !!id;
 
   const [nomComplet, setNomComplet] = useState('');
@@ -15,6 +16,7 @@ export default function PatientsForm() {
   const [typePriseEnCharge, setTypePriseEnCharge] = useState('IPM');
   const [ipmId, setIpmId] = useState('');
   const [assuranceId, setAssuranceId] = useState('');
+  const [caisseId, setCaisseId] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState('');
@@ -28,9 +30,15 @@ export default function PatientsForm() {
       setTypePriseEnCharge(p.typePriseEnCharge);
       setIpmId(p.ipmId || '');
       setAssuranceId(p.assuranceId || '');
+      setCaisseId(p.caisseId || '');
       setLoading(false);
     });
   }, [isEdit, id]);
+
+  const listes = { ipms, assurances, caisses };
+  const entiteIds = { IPM: ipmId, ASSURANCE: assuranceId, CAISSE: caisseId };
+  const setEntiteIds = { IPM: setIpmId, ASSURANCE: setAssuranceId, CAISSE: setCaisseId };
+  const typeChoisi = getTypePriseEnCharge(typePriseEnCharge);
 
   if (loading) {
     return <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>;
@@ -47,6 +55,7 @@ export default function PatientsForm() {
         typePriseEnCharge,
         ipmId: typePriseEnCharge === 'IPM' ? ipmId : '',
         assuranceId: typePriseEnCharge === 'ASSURANCE' ? assuranceId : '',
+        caisseId: typePriseEnCharge === 'CAISSE' ? caisseId : '',
       };
       if (isEdit) {
         await updatePatient(id, payload);
@@ -96,45 +105,30 @@ export default function PatientsForm() {
                 onChange={(e) => setTypePriseEnCharge(e.target.value)}
                 required
               >
-                <option value="IPM">IPM</option>
-                <option value="ASSURANCE">Assurance</option>
+                {TYPES_PRISE_EN_CHARGE.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
               </select>
             </div>
 
-            {typePriseEnCharge === 'IPM' ? (
-              <div className="mb-3">
-                <label className="form-label">IPM</label>
-                <select className="form-select" value={ipmId} onChange={(e) => setIpmId(e.target.value)} required>
-                  <option value="">-- Selectionner --</option>
-                  {ipms
-                    .filter((i) => i.actif)
-                    .map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.nom}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            ) : (
-              <div className="mb-3">
-                <label className="form-label">Assurance</label>
-                <select
-                  className="form-select"
-                  value={assuranceId}
-                  onChange={(e) => setAssuranceId(e.target.value)}
-                  required
-                >
-                  <option value="">-- Selectionner --</option>
-                  {assurances
-                    .filter((a) => a.actif)
-                    .map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.nom}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            )}
+            <div className="mb-3">
+              <label className="form-label">{typeChoisi.label}</label>
+              <select
+                className="form-select"
+                value={entiteIds[typeChoisi.value]}
+                onChange={(e) => setEntiteIds[typeChoisi.value](e.target.value)}
+                required
+              >
+                <option value="">-- Selectionner --</option>
+                {(listes[typeChoisi.listKey] || []).filter((e) => e.actif).map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.nom}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div className="d-flex gap-2">
               <button type="submit" className="btn btn-primary" disabled={saving}>

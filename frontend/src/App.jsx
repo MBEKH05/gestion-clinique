@@ -16,6 +16,9 @@ import IPMTarifs from './pages/IPMTarifs';
 import AssurancesList from './pages/AssurancesList';
 import AssurancesForm from './pages/AssurancesForm';
 import AssurancesTarifs from './pages/AssurancesTarifs';
+import CaissesList from './pages/CaissesList';
+import CaissesForm from './pages/CaissesForm';
+import CaissesTarifs from './pages/CaissesTarifs';
 import PatientsList from './pages/PatientsList';
 import PatientsForm from './pages/PatientsForm';
 import DevisList from './pages/DevisList';
@@ -113,6 +116,10 @@ export default function App() {
             <Route path="/assurances/ajouter" element={<AssurancesForm />} />
             <Route path="/assurances/:id/modifier" element={<AssurancesForm />} />
             <Route path="/assurances/:id/tarifs" element={<AssurancesTarifs />} />
+            <Route path="/caisses" element={<CaissesList />} />
+            <Route path="/caisses/ajouter" element={<CaissesForm />} />
+            <Route path="/caisses/:id/modifier" element={<CaissesForm />} />
+            <Route path="/caisses/:id/tarifs" element={<CaissesTarifs />} />
 
             <Route path="/patients" element={<PatientsList />} />
             <Route path="/patients/ajouter" element={<PatientsForm />} />

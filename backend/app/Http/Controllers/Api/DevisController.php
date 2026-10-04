@@ -94,12 +94,14 @@ class DevisController extends Controller
     {
         $type = $request->query('type_prise_en_charge');
 
-        if (! in_array($type, ['IPM', 'ASSURANCE'], true)) {
+        $colonnes = ['IPM' => 'ipm_id', 'ASSURANCE' => 'assurance_id', 'CAISSE' => 'caisse_id'];
+
+        if (! isset($colonnes[$type])) {
             return;
         }
 
         $entiteId = $request->query('entite_id');
-        $column = $type === 'IPM' ? 'ipm_id' : 'assurance_id';
+        $column = $colonnes[$type];
 
         $query->whereHas('patient', function ($p) use ($type, $column, $entiteId) {
             $p->where('type_prise_en_charge', $type);

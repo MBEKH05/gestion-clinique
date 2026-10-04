@@ -4,11 +4,12 @@ import { useData } from '../context/DataContext';
 import { devisAPI, patientsAPI } from '../api/endpoints';
 import { convertDevisFromAPI, convertPatientFromAPI } from '../utils/apiConverters';
 import { formatMontant } from '../utils/devisUtils';
+import { TYPES_PRISE_EN_CHARGE, getTypePriseEnCharge } from '../utils/priseEnCharge';
 
 export default function DevisForm({ isProforma: isProformaProp = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { analyses, ipms, assurances, categories, getPrixAnalyse, reloadTarifs, addDevis, updateDevis, addPatient, updatePatient } =
+  const { analyses, ipms, assurances, caisses, categories, getPrixAnalyse, reloadTarifs, addDevis, updateDevis, addPatient, updatePatient } =
     useData();
 
   const isEdit = !!id;
@@ -20,6 +21,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
   const [typePriseEnCharge, setTypePriseEnCharge] = useState('IPM');
   const [ipmId, setIpmId] = useState('');
   const [assuranceId, setAssuranceId] = useState('');
+  const [caisseId, setCaisseId] = useState('');
   const [souscripteur, setSouscripteur] = useState('');
   const [isProforma] = useState(isProformaProp);
 
@@ -51,6 +53,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
           setTypePriseEnCharge(patient.typePriseEnCharge);
           setIpmId(patient.ipmId || '');
           setAssuranceId(patient.assuranceId || '');
+          setCaisseId(patient.caisseId || '');
           setExistingPatientId(patient.id);
         })
         .catch(() => {})
@@ -63,6 +66,17 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, id]);
+
+  const listes = { ipms, assurances, caisses };
+  const entiteIds = { IPM: ipmId, ASSURANCE: assuranceId, CAISSE: caisseId };
+  const setEntiteIds = { IPM: setIpmId, ASSURANCE: setAssuranceId, CAISSE: setCaisseId };
+  const typeChoisi = getTypePriseEnCharge(typePriseEnCharge);
+  // Identifiants passes a getPrixAnalyse : seul celui du type choisi est renseigne.
+  const entitePrix = [
+    typePriseEnCharge === 'IPM' ? ipmId : null,
+    typePriseEnCharge === 'ASSURANCE' ? assuranceId : null,
+    typePriseEnCharge === 'CAISSE' ? caisseId : null,
+  ];
 
   const categorieNames = categories.map((c) => (typeof c === 'string' ? c : c.nom));
 
@@ -79,7 +93,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
   }, [lignes]);
 
   const handleAddAnalyse = (analyse) => {
-    const prix = getPrixAnalyse(analyse.id, typePriseEnCharge === 'IPM' ? ipmId : null, typePriseEnCharge === 'ASSURANCE' ? assuranceId : null);
+    const prix = getPrixAnalyse(analyse.id, ...entitePrix);
     const newLigne = {
       id: `tmp-${Date.now()}`,
       analyseId: analyse.id,
@@ -98,11 +112,9 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
   };
 
   const handleRecalculerPrix = () => {
-    const ipm = typePriseEnCharge === 'IPM' ? ipmId : null;
-    const assurance = typePriseEnCharge === 'ASSURANCE' ? assuranceId : null;
     setLignes((prev) =>
       prev.map((l) => {
-        const nouveauPrix = getPrixAnalyse(l.analyseId, ipm, assurance);
+        const nouveauPrix = getPrixAnalyse(l.analyseId, ...entitePrix);
         return nouveauPrix > 0 ? { ...l, prix: nouveauPrix } : l;
       })
     );
@@ -137,6 +149,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
         typePriseEnCharge,
         ipmId: typePriseEnCharge === 'IPM' ? ipmId : '',
         assuranceId: typePriseEnCharge === 'ASSURANCE' ? assuranceId : '',
+        caisseId: typePriseEnCharge === 'CAISSE' ? caisseId : '',
       };
 
       const { data: searchData } = await patientsAPI.search(matricule, 1, 20);
@@ -149,7 +162,8 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
         const changed =
           found.typePriseEnCharge !== typePriseEnCharge ||
           found.ipmId !== patientPayload.ipmId ||
-          found.assuranceId !== patientPayload.assuranceId;
+          found.assuranceId !== patientPayload.assuranceId ||
+          found.caisseId !== patientPayload.caisseId;
         if (changed) {
           await updatePatient(found.id, patientPayload);
         }
@@ -227,40 +241,29 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
                   value={typePriseEnCharge}
                   onChange={(e) => setTypePriseEnCharge(e.target.value)}
                 >
-                  <option value="IPM">IPM</option>
-                  <option value="ASSURANCE">Assurance</option>
+                  {TYPES_PRISE_EN_CHARGE.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
                 </select>
               </div>
-              {typePriseEnCharge === 'IPM' ? (
-                <div className="col-md-4">
-                  <label className="form-label">IPM</label>
-                  <select className="form-select" value={ipmId} onChange={(e) => setIpmId(e.target.value)} required>
-                    <option value="">-- Selectionner --</option>
-                    {ipms.filter((i) => i.actif).map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.nom}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="col-md-4">
-                  <label className="form-label">Assurance</label>
-                  <select
-                    className="form-select"
-                    value={assuranceId}
-                    onChange={(e) => setAssuranceId(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Selectionner --</option>
-                    {assurances.filter((a) => a.actif).map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.nom}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div className="col-md-4">
+                <label className="form-label">{typeChoisi.label}</label>
+                <select
+                  className="form-select"
+                  value={entiteIds[typeChoisi.value]}
+                  onChange={(e) => setEntiteIds[typeChoisi.value](e.target.value)}
+                  required
+                >
+                  <option value="">-- Selectionner --</option>
+                  {(listes[typeChoisi.listKey] || []).filter((e) => e.actif).map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="col-md-4">
                 <label className="form-label">Souscripteur (optionnel)</label>
                 <input
@@ -307,7 +310,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
             </p>
             <div className="row g-2" style={{ maxHeight: 300, overflowY: 'auto' }}>
               {analysesFiltrees.map((a) => {
-                const prix = getPrixAnalyse(a.id, typePriseEnCharge === 'IPM' ? ipmId : null, typePriseEnCharge === 'ASSURANCE' ? assuranceId : null);
+                const prix = getPrixAnalyse(a.id, ...entitePrix);
                 const nbDejaAjoutee = lignesCountByAnalyse.get(a.id) || 0;
                 const dejaAjoutee = nbDejaAjoutee > 0;
                 return (

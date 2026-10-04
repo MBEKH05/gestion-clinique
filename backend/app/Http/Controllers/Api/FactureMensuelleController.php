@@ -13,7 +13,7 @@ class FactureMensuelleController extends Controller
         $request->validate([
             'mois' => 'required|integer|min:1|max:12',
             'annee' => 'required|integer|min:2000|max:2100',
-            'typePriseEnCharge' => 'required|string|in:IPM,ASSURANCE',
+            'typePriseEnCharge' => 'required|string|in:IPM,ASSURANCE,CAISSE',
             'entiteId' => 'required|string',
         ]);
 

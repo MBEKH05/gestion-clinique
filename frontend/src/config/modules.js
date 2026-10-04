@@ -15,6 +15,7 @@ const FACTURATION_MODULE = {
         { type: 'database-dropdown', label: 'Base de donnees', icon: 'bi-database' },
         { to: '/ipm', label: 'IPM', icon: 'bi-building' },
         { to: '/assurances', label: 'Assurances', icon: 'bi-shield-check' },
+        { to: '/caisses', label: 'Caisse', icon: 'bi-safe' },
         { to: '/patients', label: 'Patients', icon: 'bi-people' },
       ],
     },
