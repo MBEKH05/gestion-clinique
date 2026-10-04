@@ -3,7 +3,6 @@ import {
   analysesAPI,
   ipmsAPI,
   assurancesAPI,
-  caissesAPI,
   tarifsAPI,
   patientsAPI,
   devisAPI,
@@ -24,7 +23,7 @@ import {
 
 const DataContext = createContext(null);
 
-const CACHE_KEY = 'facturation_clinique_cache_v3';
+const CACHE_KEY = 'facturation_clinique_cache_v2';
 const CACHE_TTL_SECONDS = 3600;
 
 function readCache() {
@@ -56,7 +55,6 @@ export function DataProvider({ children }) {
   const [analyses, setAnalyses] = useState([]);
   const [ipms, setIpms] = useState([]);
   const [assurances, setAssurances] = useState([]);
-  const [caisses, setCaisses] = useState([]);
   const [tarifs, setTarifs] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +68,6 @@ export function DataProvider({ children }) {
       setAnalyses(cached.analyses || []);
       setIpms(cached.ipms || []);
       setAssurances(cached.assurances || []);
-      setCaisses(cached.caisses || []);
       setTarifs((cached.tarifs || []).map(convertTarifFromAPI));
       setCategories(cached.categories || []);
       setLoading(false);
@@ -78,12 +75,11 @@ export function DataProvider({ children }) {
     }
 
     try {
-      const [analysesRes, ipmsRes, assurancesRes, caissesRes, tarifsRes, categoriesRes] =
+      const [analysesRes, ipmsRes, assurancesRes, tarifsRes, categoriesRes] =
         await Promise.all([
           analysesAPI.getAll(),
           ipmsAPI.getAll(),
           assurancesAPI.getAll(),
-          caissesAPI.getAll(),
           tarifsAPI.getAll(),
           categoriesAPI.getAll(),
         ]);
@@ -91,14 +87,12 @@ export function DataProvider({ children }) {
       const analysesData = analysesRes.data.results;
       const ipmsData = ipmsRes.data.results;
       const assurancesData = assurancesRes.data.results;
-      const caissesData = caissesRes.data.results;
       const tarifsData = tarifsRes.data.results;
       const categoriesData = categoriesRes.data;
 
       setAnalyses(analysesData);
       setIpms(ipmsData);
       setAssurances(assurancesData);
-      setCaisses(caissesData);
       setTarifs(tarifsData.map(convertTarifFromAPI));
       setCategories(categoriesData);
 
@@ -106,7 +100,6 @@ export function DataProvider({ children }) {
         analyses: analysesData,
         ipms: ipmsData,
         assurances: assurancesData,
-        caisses: caissesData,
         tarifs: tarifsData,
         categories: categoriesData,
       });
@@ -205,35 +198,6 @@ export function DataProvider({ children }) {
     invalidateCache();
   };
 
-  // --- Caisses ---
-  const addCaisse = async (payload) => {
-    const { data } = await caissesAPI.create(payload);
-    setCaisses((prev) => [...prev, data]);
-    invalidateCache();
-    return data;
-  };
-  const updateCaisse = async (id, payload) => {
-    const { data } = await caissesAPI.update(id, payload);
-    setCaisses((prev) => prev.map((c) => (c.id === id ? data : c)));
-    invalidateCache();
-    return data;
-  };
-  const deleteCaisse = async (id) => {
-    await caissesAPI.remove(id);
-    setCaisses((prev) => prev.filter((c) => c.id !== id));
-    invalidateCache();
-  };
-  const activateCaisse = async (id) => {
-    const { data } = await caissesAPI.activate(id);
-    setCaisses((prev) => prev.map((c) => (c.id === id ? data : c)));
-    invalidateCache();
-  };
-  const deactivateCaisse = async (id) => {
-    const { data } = await caissesAPI.deactivate(id);
-    setCaisses((prev) => prev.map((c) => (c.id === id ? data : c)));
-    invalidateCache();
-  };
-
   // --- Tarifs ---
   const reloadTarifs = async () => {
     const { data } = await tarifsAPI.getFresh();
@@ -315,23 +279,20 @@ export function DataProvider({ children }) {
 
   // --- Utilitaires ---
   const getPrixAnalyse = useCallback(
-    (analyseId, ipmId, assuranceId, caisseId) => {
-      // Specific tariff first (exact IPM, assurance or caisse match)
+    (analyseId, ipmId, assuranceId) => {
+      // Specific tariff first (exact IPM or assurance match)
       const specifique = tarifs.find(
         (t) =>
           t.analyseId === analyseId &&
-          ((ipmId && t.ipmId === ipmId) ||
-            (assuranceId && t.assuranceId === assuranceId) ||
-            (caisseId && t.caisseId === caisseId))
+          ((ipmId && t.ipmId === ipmId) || (assuranceId && t.assuranceId === assuranceId))
       );
       if (specifique) return Number(specifique.prix);
 
       // Fall back to generic type tariff
-      const type = ipmId ? 'IPM' : assuranceId ? 'ASSURANCE' : caisseId ? 'CAISSE' : null;
+      const type = ipmId ? 'IPM' : assuranceId ? 'ASSURANCE' : null;
       if (type) {
         const generique = tarifs.find(
-          (t) =>
-            t.analyseId === analyseId && t.typePriseEnCharge === type && !t.ipmId && !t.assuranceId && !t.caisseId
+          (t) => t.analyseId === analyseId && t.typePriseEnCharge === type && !t.ipmId && !t.assuranceId
         );
         if (generique) return Number(generique.prix);
       }
@@ -345,7 +306,6 @@ export function DataProvider({ children }) {
     analyses,
     ipms,
     assurances,
-    caisses,
     tarifs,
     categories,
     loading,
@@ -363,11 +323,6 @@ export function DataProvider({ children }) {
     deleteAssurance,
     activateAssurance,
     deactivateAssurance,
-    addCaisse,
-    updateCaisse,
-    deleteCaisse,
-    activateCaisse,
-    deactivateCaisse,
     reloadTarifs,
     addTarif,
     updateTarif,

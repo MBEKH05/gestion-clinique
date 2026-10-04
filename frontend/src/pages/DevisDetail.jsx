@@ -4,14 +4,13 @@ import { devisAPI, patientsAPI } from '../api/endpoints';
 import { convertDevisFromAPI, convertPatientFromAPI } from '../utils/apiConverters';
 import { getDevisNumero, formatMontant } from '../utils/devisUtils';
 import { useData } from '../context/DataContext';
-import { getEntiteNom } from '../utils/priseEnCharge';
 import { CATEGORY_ORDER } from '../utils/categoryUtils';
 import { generatePDFDevis } from '../utils/pdfUtils';
 
 export default function DevisDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { ipms, assurances, caisses } = useData();
+  const { ipms, assurances } = useData();
   const [devis, setDevis] = useState(null);
   const [patient, setPatient] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -36,7 +35,10 @@ export default function DevisDetail() {
     return <div className="alert alert-warning">Devis introuvable.</div>;
   }
 
-  const entiteNom = getEntiteNom(patient, { ipms, assurances, caisses });
+  const entiteNom =
+    patient?.typePriseEnCharge === 'IPM'
+      ? ipms.find((i) => i.id === patient.ipmId)?.nom
+      : assurances.find((a) => a.id === patient?.assuranceId)?.nom;
 
   const lignesParCategorie = {};
   devis.lignes.forEach((l) => {

@@ -50,8 +50,8 @@ class PatientController extends Controller
         }
 
         $type = $request->input('type_prise_en_charge');
-        if (! in_array($type, ['IPM', 'ASSURANCE', 'CAISSE'], true)) {
-            return response()->json(['detail' => 'type_prise_en_charge doit etre IPM, ASSURANCE ou CAISSE.'], 400);
+        if (! in_array($type, ['IPM', 'ASSURANCE'], true)) {
+            return response()->json(['detail' => 'type_prise_en_charge doit etre IPM ou ASSURANCE.'], 400);
         }
 
         $patient = Patient::create([
@@ -61,7 +61,6 @@ class PatientController extends Controller
             'type_prise_en_charge' => $type,
             'ipm_id' => $request->input('ipm') ?: null,
             'assurance_id' => $request->input('assurance') ?: null,
-            'caisse_id' => $request->input('caisse') ?: null,
         ]);
 
         return PatientResource::make($patient)->response()->setStatusCode(201);
@@ -85,11 +84,7 @@ class PatientController extends Controller
         }
 
         if ($request->has('type_prise_en_charge')) {
-            $type = $request->input('type_prise_en_charge');
-            if (! in_array($type, ['IPM', 'ASSURANCE', 'CAISSE'], true)) {
-                return response()->json(['detail' => 'type_prise_en_charge doit etre IPM, ASSURANCE ou CAISSE.'], 400);
-            }
-            $patient->type_prise_en_charge = $type;
+            $patient->type_prise_en_charge = $request->input('type_prise_en_charge');
         }
 
         if ($request->has('ipm')) {
@@ -98,10 +93,6 @@ class PatientController extends Controller
 
         if ($request->has('assurance')) {
             $patient->assurance_id = $request->input('assurance') ?: null;
-        }
-
-        if ($request->has('caisse')) {
-            $patient->caisse_id = $request->input('caisse') ?: null;
         }
 
         $patient->save();

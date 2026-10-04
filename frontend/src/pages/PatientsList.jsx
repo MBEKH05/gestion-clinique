@@ -3,12 +3,11 @@ import { Link } from 'react-router-dom';
 import { patientsAPI } from '../api/endpoints';
 import { convertPatientFromAPI } from '../utils/apiConverters';
 import { useData } from '../context/DataContext';
-import { getEntiteNom } from '../utils/priseEnCharge';
 
 const PAGE_SIZE = 20;
 
 export default function PatientsList() {
-  const { ipms, assurances, caisses, deletePatient } = useData();
+  const { ipms, assurances, deletePatient } = useData();
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [page, setPage] = useState(1);
@@ -37,7 +36,8 @@ export default function PatientsList() {
 
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
-  const listes = useMemo(() => ({ ipms, assurances, caisses }), [ipms, assurances, caisses]);
+  const ipmMap = useMemo(() => new Map(ipms.map((i) => [i.id, i.nom])), [ipms]);
+  const assuranceMap = useMemo(() => new Map(assurances.map((a) => [a.id, a.nom])), [assurances]);
 
   const handleDelete = async (id) => {
     if (!window.confirm('Supprimer ce patient ?')) return;
@@ -90,7 +90,7 @@ export default function PatientsList() {
                   <th>Nom complet</th>
                   <th>Matricule</th>
                   <th>Type</th>
-                  <th>IPM / Assurance / Caisse</th>
+                  <th>IPM / Assurance</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -103,7 +103,7 @@ export default function PatientsList() {
                       <span className="badge bg-info text-dark">{p.typePriseEnCharge}</span>
                     </td>
                     <td>
-                      {getEntiteNom(p, listes) || '-'}
+                      {p.typePriseEnCharge === 'IPM' ? ipmMap.get(p.ipmId) || '-' : assuranceMap.get(p.assuranceId) || '-'}
                     </td>
                     <td>
                       <Link to={`/patients/${p.id}/modifier`} className="btn btn-sm btn-outline-primary me-2">

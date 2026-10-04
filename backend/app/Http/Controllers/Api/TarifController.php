@@ -39,9 +39,8 @@ class TarifController extends Controller
             'id' => $request->input('id') ?: (string) Str::uuid(),
             'analyse_id' => $analyseId,
             'type_prise_en_charge' => $type,
-            'ipm_id' => $type === 'IPM' ? null : $request->input('ipm'),
-            'assurance_id' => $type === 'ASSURANCE' ? null : $request->input('assurance'),
-            'caisse_id' => $type === 'CAISSE' ? null : $request->input('caisse'),
+            'ipm_id' => in_array($type, ['IPM', 'CAISSE'], true) ? null : $request->input('ipm'),
+            'assurance_id' => in_array($type, ['ASSURANCE', 'CAISSE'], true) ? null : $request->input('assurance'),
             'prix' => $prix,
         ]);
 
@@ -71,10 +70,6 @@ class TarifController extends Controller
 
         if ($request->has('assurance')) {
             $tarif->assurance_id = $request->input('assurance');
-        }
-
-        if ($request->has('caisse')) {
-            $tarif->caisse_id = $request->input('caisse');
         }
 
         if ($request->has('analyse')) {

@@ -3,7 +3,6 @@ import { devisAPI, statistiquesAPI } from '../api/endpoints';
 import { useData } from '../context/DataContext';
 import { formatMontant } from '../utils/devisUtils';
 import { generatePDFListeFactures } from '../utils/pdfUtils';
-import { TYPES_PRISE_EN_CHARGE, getTypePriseEnCharge } from '../utils/priseEnCharge';
 
 const STATUTS = [
   { value: 'NON_REGLE', label: 'Non regle' },
@@ -216,7 +215,7 @@ function SectionFactures({ titre, labelEntite, factures, params, parMois, modifi
 }
 
 export default function SuiviFactures({ data, params, onSaved }) {
-  const listes = useData();
+  const { ipms, assurances } = useData();
   const [modifications, setModifications] = useState({});
   const [saving, setSaving] = useState(false);
   const [onglet, setOnglet] = useState('IPM');
@@ -224,11 +223,10 @@ export default function SuiviFactures({ data, params, onSaved }) {
   const [mensuel, setMensuel] = useState(null);
   const [loadingMensuel, setLoadingMensuel] = useState(false);
 
-  const typeOnglet = getTypePriseEnCharge(onglet);
-  const listeOnglet = listes[typeOnglet.listKey];
   const entites = useMemo(
-    () => [...(listeOnglet || [])].sort((a, b) => String(a.nom).localeCompare(String(b.nom))),
-    [listeOnglet]
+    () =>
+      [...((onglet === 'IPM' ? ipms : assurances) || [])].sort((a, b) => String(a.nom).localeCompare(String(b.nom))),
+    [onglet, ipms, assurances]
   );
   const entite = entites.find((e) => String(e.id) === entiteId);
 
@@ -265,10 +263,9 @@ export default function SuiviFactures({ data, params, onSaved }) {
     }));
   };
 
-  const facturesParType = Object.fromEntries(
-    TYPES_PRISE_EN_CHARGE.map((t) => [t.value, data.factures.filter((f) => f.typePriseEnCharge === t.value)])
-  );
-  const facturesOnglet = facturesParType[onglet] ?? [];
+  const facturesIPM = data.factures.filter((f) => f.typePriseEnCharge === 'IPM');
+  const facturesAssurance = data.factures.filter((f) => f.typePriseEnCharge !== 'IPM');
+  const facturesOnglet = onglet === 'IPM' ? facturesIPM : facturesAssurance;
   const facturesSource = entiteId ? mensuel?.factures ?? [] : facturesOnglet;
 
   const handleSave = async () => {
@@ -293,7 +290,7 @@ export default function SuiviFactures({ data, params, onSaved }) {
   };
 
   const hasModifications = Object.keys(modifications).length > 0;
-  const labelType = typeOnglet.label;
+  const labelType = onglet === 'IPM' ? 'IPM' : 'Assurance';
   const periodeLabel = params.mois ? `${String(params.mois).padStart(2, '0')}/${params.annee}` : `Annee ${params.annee}`;
 
   return (
@@ -301,7 +298,10 @@ export default function SuiviFactures({ data, params, onSaved }) {
       <div className="d-flex flex-wrap align-items-center gap-3 mb-3">
         <h5 className="mb-0">Suivi des Factures</h5>
         <ul className="nav nav-pills">
-          {TYPES_PRISE_EN_CHARGE.map((t) => ({ value: t.value, label: t.pluriel, nb: facturesParType[t.value].length })).map((o) => (
+          {[
+            { value: 'IPM', label: 'IPM', nb: facturesIPM.length },
+            { value: 'ASSURANCE', label: 'Assurances', nb: facturesAssurance.length },
+          ].map((o) => (
             <li className="nav-item" key={o.value}>
               <button
                 type="button"
@@ -322,7 +322,7 @@ export default function SuiviFactures({ data, params, onSaved }) {
           }}
           title={`Choisir une ${labelType} pour voir ses factures mois par mois`}
         >
-          <option value="">{onglet === 'IPM' ? 'Toutes les IPM' : `Toutes les ${typeOnglet.pluriel.toLowerCase()}`}</option>
+          <option value="">{onglet === 'IPM' ? 'Toutes les IPM' : 'Toutes les assurances'}</option>
           {entites.map((e) => (
             <option key={e.id} value={String(e.id)}>
               {e.nom}
@@ -352,7 +352,7 @@ export default function SuiviFactures({ data, params, onSaved }) {
       ) : (
         <SectionFactures
           key={onglet}
-          titre={`Factures ${typeOnglet.pluriel}`}
+          titre={onglet === 'IPM' ? 'Factures IPM' : 'Factures Assurances'}
           labelEntite={labelType}
           factures={facturesSource}
           params={params}

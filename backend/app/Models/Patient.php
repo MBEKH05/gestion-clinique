@@ -21,7 +21,6 @@ class Patient extends Model
         'type_prise_en_charge',
         'ipm_id',
         'assurance_id',
-        'caisse_id',
     ];
 
     protected function casts(): array
@@ -39,11 +38,6 @@ class Patient extends Model
     public function assurance()
     {
         return $this->belongsTo(Assurance::class, 'assurance_id');
-    }
-
-    public function caisse()
-    {
-        return $this->belongsTo(Caisse::class, 'caisse_id');
     }
 
     public function devis()

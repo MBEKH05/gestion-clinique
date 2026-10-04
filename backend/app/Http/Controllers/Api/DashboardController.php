@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Analyse;
 use App\Models\Assurance;
-use App\Models\Caisse;
 use App\Models\Devis;
 use App\Models\Ipm;
 use App\Models\Patient;
@@ -36,7 +35,6 @@ class DashboardController extends Controller
             'totalAnalyses' => Analyse::count(),
             'totalIPM' => Ipm::count(),
             'totalAssurances' => Assurance::count(),
-            'totalCaisses' => Caisse::count(),
             'totalPatients' => Patient::count(),
             'totalDevis' => (int) $devisStats->total_devis,
             'devisMois' => (int) $devisStats->devis_mois,

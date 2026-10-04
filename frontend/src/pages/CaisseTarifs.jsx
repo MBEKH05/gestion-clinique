@@ -1,12 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { CATEGORY_ORDER, getCategoryName } from '../utils/categoryUtils';
 
-export default function CaissesTarifs() {
-  const { id } = useParams();
-  const { caisses, analyses, tarifs, categories, addTarif, updateTarif, deleteTarif } = useData();
-  const caisse = caisses.find((a) => a.id === id);
+export default function CaisseTarifs() {
+  const { analyses, tarifs, categories, addTarif, updateTarif, deleteTarif } = useData();
 
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('toutes');
@@ -69,7 +66,7 @@ export default function CaissesTarifs() {
   };
 
   const handleImport = async () => {
-    if (!window.confirm('Importer les analyses standard (prix a 0) pour cette caisse ?')) return;
+    if (!window.confirm('Ajouter toutes les analyses sans prix Caisse (prix a 0) ?')) return;
     setImporting(true);
     try {
       const missing = analyses.filter((a) => !tarifsParAnalyse.get(a.id));
@@ -81,21 +78,12 @@ export default function CaissesTarifs() {
     }
   };
 
-  if (!caisse) {
-    return <div className="alert alert-warning">Caisse introuvable.</div>;
-  }
-
   return (
     <div>
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h2 className="mb-0">Tarifs Caisse &mdash; {caisse.nom}</h2>
-        <Link to="/caisses" className="btn btn-outline-secondary">
-          Retour
-        </Link>
-      </div>
+      <h2 className="mb-3">Caisse &mdash; Tarifs des analyses</h2>
 
       <div className="alert alert-info">
-        Les tarifs Caisse sont generiques : ils s'appliquent a toutes les caisses.
+        Toutes les analyses de la base sont listees ci-dessous : definissez le prix Caisse de chacune.
       </div>
 
       <div className="card shadow-sm mb-4">

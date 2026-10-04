@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Assurance;
-use App\Models\Caisse;
 use App\Models\Devis;
 use App\Models\Ipm;
 use App\Support\FactureNumero;
@@ -13,10 +12,6 @@ use Illuminate\Support\Carbon;
 
 class StatistiqueController extends Controller
 {
-    private const COLONNES_ENTITE = ['IPM' => 'ipm_id', 'ASSURANCE' => 'assurance_id', 'CAISSE' => 'caisse_id'];
-
-    private const NOM_INCONNU = ['IPM' => 'IPM inconnue', 'ASSURANCE' => 'Assurance inconnue', 'CAISSE' => 'Caisse inconnue'];
-
     public function paiement(Request $request)
     {
         $now = Carbon::now();
@@ -49,8 +44,7 @@ class StatistiqueController extends Controller
         return response()->json([
             'statistiques' => $statistiques($factures),
             'statistiquesIPM' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] === 'IPM'))),
-            'statistiquesAssurance' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] === 'ASSURANCE'))),
-            'statistiquesCaisse' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] === 'CAISSE'))),
+            'statistiquesAssurance' => $statistiques(array_values(array_filter($factures, fn ($f) => $f['typePriseEnCharge'] !== 'IPM'))),
             'factures' => $factures,
         ]);
     }
@@ -62,13 +56,13 @@ class StatistiqueController extends Controller
     public function facturesMensuelles(Request $request)
     {
         $data = $request->validate([
-            'type' => 'required|in:IPM,ASSURANCE,CAISSE',
+            'type' => 'required|in:IPM,ASSURANCE',
             'entite_id' => 'required|string',
             'annee' => 'nullable|integer|min:2000|max:2100',
         ]);
 
         $annee = (int) ($data['annee'] ?? Carbon::now()->year);
-        $colonne = self::COLONNES_ENTITE[$data['type']];
+        $colonne = $data['type'] === 'IPM' ? 'ipm_id' : 'assurance_id';
 
         $devisList = $this->devisFactures(
             Carbon::create($annee, 1, 1)->startOfDay(),
@@ -81,7 +75,9 @@ class StatistiqueController extends Controller
 
         $parMois = $devisList->groupBy(fn ($devis) => (int) $devis->date_creation->month);
 
-        $entiteNom = $this->nomsEntites()[$data['type']][$data['entite_id']] ?? self::NOM_INCONNU[$data['type']];
+        $entiteNom = $data['type'] === 'IPM'
+            ? (Ipm::whereKey($data['entite_id'])->value('nom') ?? 'IPM inconnue')
+            : (Assurance::whereKey($data['entite_id'])->value('nom') ?? 'Assurance inconnue');
 
         $factures = [];
 
@@ -109,20 +105,11 @@ class StatistiqueController extends Controller
         ]);
     }
 
-    private function nomsEntites(): array
-    {
-        return [
-            'IPM' => Ipm::pluck('nom', 'id'),
-            'ASSURANCE' => Assurance::pluck('nom', 'id'),
-            'CAISSE' => Caisse::pluck('nom', 'id'),
-        ];
-    }
-
     private function devisFactures(Carbon $debut, Carbon $fin)
     {
         return Devis::query()
             ->select(['id', 'patient_id', 'total', 'taux_couverture', 'date_creation', 'statut_paiement', 'date_paiement', 'commentaire_paiement'])
-            ->with(['patient:id,type_prise_en_charge,ipm_id,assurance_id,caisse_id'])
+            ->with(['patient:id,type_prise_en_charge,ipm_id,assurance_id'])
             ->where('is_proforma', false)
             ->whereBetween('date_creation', [$debut, $fin]);
     }
@@ -141,8 +128,7 @@ class StatistiqueController extends Controller
                 continue;
             }
 
-            $colonne = self::COLONNES_ENTITE[$patient->type_prise_en_charge] ?? null;
-            $entiteId = $colonne ? $patient->{$colonne} : null;
+            $entiteId = $patient->type_prise_en_charge === 'IPM' ? $patient->ipm_id : $patient->assurance_id;
 
             if (! $entiteId) {
                 continue;
@@ -178,12 +164,15 @@ class StatistiqueController extends Controller
             }
         }
 
-        $noms = $this->nomsEntites();
+        $ipmNoms = Ipm::pluck('nom', 'id');
+        $assuranceNoms = Assurance::pluck('nom', 'id');
 
         $factures = [];
 
         foreach ($groupes as $groupe) {
-            $entiteNom = $noms[$groupe['type']][$groupe['entiteId']] ?? self::NOM_INCONNU[$groupe['type']];
+            $entiteNom = $groupe['type'] === 'IPM'
+                ? ($ipmNoms[$groupe['entiteId']] ?? 'IPM inconnue')
+                : ($assuranceNoms[$groupe['entiteId']] ?? 'Assurance inconnue');
 
             $statutsUniques = array_unique($groupe['statuts']);
             $statutFacture = count($statutsUniques) === 1 ? $statutsUniques[array_key_first($statutsUniques)] : 'PARTIELLEMENT_REGLE';

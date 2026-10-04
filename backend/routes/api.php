@@ -5,7 +5,6 @@ use App\Http\Controllers\Api\Admin\PlatformDashboardController;
 use App\Http\Controllers\Api\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\AnalyseController;
 use App\Http\Controllers\Api\AssuranceController;
-use App\Http\Controllers\Api\CaisseController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategorieController;
 use App\Http\Controllers\Api\DashboardController;
@@ -43,12 +42,6 @@ Route::middleware('auth:api')->group(function () {
     Route::middleware('admin')->group(function () {
         Route::post('assurances/{id}/activate', [AssuranceController::class, 'activate']);
         Route::post('assurances/{id}/deactivate', [AssuranceController::class, 'deactivate']);
-    });
-
-    Route::apiResource('caisses', CaisseController::class)->parameters(['caisses' => 'id']);
-    Route::middleware('admin')->group(function () {
-        Route::post('caisses/{id}/activate', [CaisseController::class, 'activate']);
-        Route::post('caisses/{id}/deactivate', [CaisseController::class, 'deactivate']);
     });
 
     Route::apiResource('tarifs', TarifController::class)->parameters(['tarifs' => 'id']);

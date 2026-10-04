@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { TYPES_PRISE_EN_CHARGE, getTypePriseEnCharge } from '../utils/priseEnCharge';
 import { tarifsAPI } from '../api/endpoints';
 
 export default function AnalysesForm() {
   const { category, id } = useParams();
   const navigate = useNavigate();
-  const { analyses, ipms, assurances, caisses, addAnalyse, updateAnalyse } = useData();
+  const { analyses, ipms, assurances, addAnalyse, updateAnalyse } = useData();
 
   const isEdit = !!id;
   const existing = isEdit ? analyses.find((a) => a.id === id) : null;
@@ -17,15 +16,9 @@ export default function AnalysesForm() {
   const [typePriseEnCharge, setTypePriseEnCharge] = useState('');
   const [ipmId, setIpmId] = useState('');
   const [assuranceId, setAssuranceId] = useState('');
-  const [caisseId, setCaisseId] = useState('');
   const [prix, setPrix] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  const listes = { ipms, assurances, caisses };
-  const entiteIds = { IPM: ipmId, ASSURANCE: assuranceId, CAISSE: caisseId };
-  const setEntiteIds = { IPM: setIpmId, ASSURANCE: setAssuranceId, CAISSE: setCaisseId };
-  const typeChoisi = getTypePriseEnCharge(typePriseEnCharge);
 
   useEffect(() => {
     if (existing) setNom(existing.nom);
@@ -46,7 +39,6 @@ export default function AnalysesForm() {
             type_prise_en_charge: typePriseEnCharge || null,
             ipm: typePriseEnCharge === 'IPM' ? ipmId || null : null,
             assurance: typePriseEnCharge === 'ASSURANCE' ? assuranceId || null : null,
-            caisse: typePriseEnCharge === 'CAISSE' ? caisseId || null : null,
             prix: Number(prix),
           });
         }
@@ -94,26 +86,37 @@ export default function AnalysesForm() {
                     onChange={(e) => setTypePriseEnCharge(e.target.value)}
                   >
                     <option value="">-- Aucun --</option>
-                    {TYPES_PRISE_EN_CHARGE.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
+                    <option value="IPM">IPM</option>
+                    <option value="ASSURANCE">Assurance</option>
                   </select>
                 </div>
 
-                {typePriseEnCharge && (
+                {typePriseEnCharge === 'IPM' && (
                   <div className="mb-3">
-                    <label className="form-label">{typeChoisi.label}</label>
+                    <label className="form-label">IPM</label>
+                    <select className="form-select" value={ipmId} onChange={(e) => setIpmId(e.target.value)}>
+                      <option value="">-- Selectionner --</option>
+                      {ipms.map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.nom}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {typePriseEnCharge === 'ASSURANCE' && (
+                  <div className="mb-3">
+                    <label className="form-label">Assurance</label>
                     <select
                       className="form-select"
-                      value={entiteIds[typeChoisi.value]}
-                      onChange={(e) => setEntiteIds[typeChoisi.value](e.target.value)}
+                      value={assuranceId}
+                      onChange={(e) => setAssuranceId(e.target.value)}
                     >
                       <option value="">-- Selectionner --</option>
-                      {(listes[typeChoisi.listKey] || []).map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {e.nom}
+                      {assurances.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.nom}
                         </option>
                       ))}
                     </select>

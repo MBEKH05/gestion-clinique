@@ -15,7 +15,6 @@ class TarifResource extends JsonResource
             'type_prise_en_charge' => $this->type_prise_en_charge,
             'ipm' => $this->ipm_id,
             'assurance' => $this->assurance_id,
-            'caisse' => $this->caisse_id,
             'prix' => (float) $this->prix,
             'created_at' => optional($this->created_at)->toIso8601String(),
         ];

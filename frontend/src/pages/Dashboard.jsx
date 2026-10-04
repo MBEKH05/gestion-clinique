@@ -38,7 +38,6 @@ export default function Dashboard() {
     { label: 'Total Analyses', value: stats?.totalAnalyses, icon: 'bi-clipboard2-pulse', grad: 'grad-primary' },
     { label: 'Total IPM', value: stats?.totalIPM, icon: 'bi-building', grad: 'grad-cyan' },
     { label: 'Total Assurances', value: stats?.totalAssurances, icon: 'bi-shield-check', grad: 'grad-emerald' },
-    { label: 'Total Caisses', value: stats?.totalCaisses, icon: 'bi-safe', grad: 'grad-primary' },
     { label: 'Total Patients', value: stats?.totalPatients, icon: 'bi-people', grad: 'grad-amber' },
   ];
 

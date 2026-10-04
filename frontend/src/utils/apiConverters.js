@@ -7,7 +7,6 @@ export function convertPatientFromAPI(patient) {
     typePriseEnCharge: patient.type_prise_en_charge,
     ipmId: patient.ipm || '',
     assuranceId: patient.assurance || '',
-    caisseId: patient.caisse || '',
     createdAt: patient.created_at,
   };
 }
@@ -20,7 +19,6 @@ export function convertPatientToAPI(patient) {
     type_prise_en_charge: patient.typePriseEnCharge,
     ipm: patient.ipmId || null,
     assurance: patient.assuranceId || null,
-    caisse: patient.caisseId || null,
   };
 }
 
@@ -76,7 +74,6 @@ export function convertTarifFromAPI(tarif) {
     typePriseEnCharge: tarif.type_prise_en_charge,
     ipmId: tarif.ipm || '',
     assuranceId: tarif.assurance || '',
-    caisseId: tarif.caisse || '',
     prix: Number(tarif.prix),
   };
 }
@@ -88,7 +85,6 @@ export function convertTarifToAPI(tarif) {
       type_prise_en_charge: tarif.typePriseEnCharge,
       ipm: null,
       assurance: null,
-      caisse: null,
       prix: tarif.prix,
     };
   }
@@ -97,7 +93,6 @@ export function convertTarifToAPI(tarif) {
     type_prise_en_charge: null,
     ipm: tarif.ipmId || null,
     assurance: tarif.assuranceId || null,
-    caisse: tarif.caisseId || null,
     prix: tarif.prix,
   };
 }

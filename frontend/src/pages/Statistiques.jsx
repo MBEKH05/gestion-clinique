@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { statistiquesAPI } from '../api/endpoints';
 import { formatMontant } from '../utils/devisUtils';
 import SuiviFactures from '../components/SuiviFactures';
-import { TYPES_PRISE_EN_CHARGE } from '../utils/priseEnCharge';
 
 export default function Statistiques() {
   const [periodeType, setPeriodeType] = useState('mois');
@@ -34,19 +33,24 @@ export default function Statistiques() {
 
   const factures = useMemo(() => data?.factures || [], [data]);
 
-  // Total et detail par entite pour chaque type de prise en charge (IPM, Assurances, Caisses).
-  const parType = useMemo(
-    () =>
-      TYPES_PRISE_EN_CHARGE.map((type) => {
-        const lignes = factures
-          .filter((f) => f.typePriseEnCharge === type.value)
-          .map((f) => ({ nom: f.entiteNom, montant: f.montantCouvert }))
-          .sort((x, y) => y.montant - x.montant);
-        return { type, lignes, total: lignes.reduce((sum, r) => sum + r.montant, 0) };
-      }),
-    [factures]
-  );
-  const totalGeneral = parType.reduce((sum, t) => sum + t.total, 0);
+  const { totalIPM, totalAssurance, parIPM, parAssurance } = useMemo(() => {
+    const parIPM = factures
+      .filter((f) => f.typePriseEnCharge === 'IPM')
+      .map((f) => ({ nom: f.entiteNom, montant: f.montantCouvert }))
+      .sort((a, b) => b.montant - a.montant);
+
+    const parAssurance = factures
+      .filter((f) => f.typePriseEnCharge === 'ASSURANCE')
+      .map((f) => ({ nom: f.entiteNom, montant: f.montantCouvert }))
+      .sort((a, b) => b.montant - a.montant);
+
+    return {
+      totalIPM: parIPM.reduce((sum, r) => sum + r.montant, 0),
+      totalAssurance: parAssurance.reduce((sum, r) => sum + r.montant, 0),
+      parIPM,
+      parAssurance,
+    };
+  }, [factures]);
 
   return (
     <div>
@@ -89,52 +93,79 @@ export default function Statistiques() {
       ) : (
         <>
           <div className="row g-3 mb-4">
-            {parType.map(({ type, total }) => (
-              <div className="col-md-3" key={type.value}>
-                <div className="card shadow-sm h-100">
-                  <div className="card-body">
-                    <div className="text-muted small">Total {type.pluriel}</div>
-                    <div className="fs-4 fw-bold">{formatMontant(total)} FCFA</div>
-                  </div>
+            <div className="col-md-4">
+              <div className="card shadow-sm h-100">
+                <div className="card-body">
+                  <div className="text-muted small">Total IPM</div>
+                  <div className="fs-4 fw-bold">{formatMontant(totalIPM)} FCFA</div>
                 </div>
               </div>
-            ))}
-            <div className="col-md-3">
+            </div>
+            <div className="col-md-4">
+              <div className="card shadow-sm h-100">
+                <div className="card-body">
+                  <div className="text-muted small">Total Assurances</div>
+                  <div className="fs-4 fw-bold">{formatMontant(totalAssurance)} FCFA</div>
+                </div>
+              </div>
+            </div>
+            <div className="col-md-4">
               <div className="card shadow-sm h-100 bg-primary text-white">
                 <div className="card-body">
                   <div className="small">Total General</div>
-                  <div className="fs-4 fw-bold">{formatMontant(totalGeneral)} FCFA</div>
+                  <div className="fs-4 fw-bold">{formatMontant(totalIPM + totalAssurance)} FCFA</div>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="row g-3 mb-4">
-            {parType.map(({ type, lignes, total }) => (
-              <div className="col-lg-4" key={type.value}>
-                <div className="card shadow-sm h-100">
-                  <div className="card-body">
-                    <h5 className="card-title">Detail par {type.label}</h5>
-                    <table className="table table-sm">
-                      <tbody>
-                        {lignes.map((row) => (
-                          <tr key={row.nom}>
-                            <td>{row.nom}</td>
-                            <td className="text-end">{formatMontant(row.montant)} FCFA</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr>
-                          <td className="fw-bold">TOTAL {type.pluriel.toUpperCase()}</td>
-                          <td className="text-end fw-bold">{formatMontant(total)} FCFA</td>
+            <div className="col-md-6">
+              <div className="card shadow-sm">
+                <div className="card-body">
+                  <h5 className="card-title">Detail par IPM</h5>
+                  <table className="table table-sm">
+                    <tbody>
+                      {parIPM.map((row) => (
+                        <tr key={row.nom}>
+                          <td>{row.nom}</td>
+                          <td className="text-end">{formatMontant(row.montant)} FCFA</td>
                         </tr>
-                      </tfoot>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td className="fw-bold">TOTAL IPM</td>
+                        <td className="text-end fw-bold">{formatMontant(totalIPM)} FCFA</td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
               </div>
-            ))}
+            </div>
+            <div className="col-md-6">
+              <div className="card shadow-sm">
+                <div className="card-body">
+                  <h5 className="card-title">Detail par Assurance</h5>
+                  <table className="table table-sm">
+                    <tbody>
+                      {parAssurance.map((row) => (
+                        <tr key={row.nom}>
+                          <td>{row.nom}</td>
+                          <td className="text-end">{formatMontant(row.montant)} FCFA</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td className="fw-bold">TOTAL ASSURANCES</td>
+                        <td className="text-end fw-bold">{formatMontant(totalAssurance)} FCFA</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </>
       )}
