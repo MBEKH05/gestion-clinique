@@ -75,6 +75,15 @@ export const medicamentsAPI = {
   getSuivi: (params) => api.get('/medicaments/suivi', { params }),
 };
 
+export const stockAPI = {
+  getEtat: () => api.get('/stock/medicaments', { params: { _t: Date.now() } }),
+  getMouvements: (params) => api.get('/stock/mouvements', { params: { ...params, _t: Date.now() } }),
+  createMouvement: (data) => api.post('/stock/mouvements', data),
+  deleteMouvement: (id) => api.delete(`/stock/mouvements/${id}`),
+  getLots: () => api.get('/stock/lots', { params: { _t: Date.now() } }),
+  updateSeuil: (id, seuil) => api.put(`/stock/medicaments/${id}/seuil`, { seuil_alerte: seuil }),
+};
+
 export const dashboardAPI = {
   getStats: () => api.get('/dashboard-stats'),
 };

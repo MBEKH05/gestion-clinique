@@ -18,6 +18,7 @@ import AssurancesForm from './pages/AssurancesForm';
 import AssurancesTarifs from './pages/AssurancesTarifs';
 import CaisseTarifs from './pages/CaisseTarifs';
 import MedicamentsSuivi from './pages/MedicamentsSuivi';
+import StockMedicaments from './pages/StockMedicaments';
 import PatientsList from './pages/PatientsList';
 import PatientsForm from './pages/PatientsForm';
 import DevisList from './pages/DevisList';
@@ -99,6 +100,7 @@ export default function App() {
             />
 
             <Route path="/medicaments/suivi" element={<MedicamentsSuivi />} />
+            <Route path="/medicaments/stock" element={<StockMedicaments />} />
             <Route path="/base-de-donnees/:category" element={<AnalysesList />} />
             <Route path="/base-de-donnees/:category/ajouter" element={<AnalysesForm />} />
             <Route path="/base-de-donnees/:category/:id/modifier" element={<AnalysesForm />} />

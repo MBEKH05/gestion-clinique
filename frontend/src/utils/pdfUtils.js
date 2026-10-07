@@ -538,6 +538,137 @@ export async function generatePDFSuiviMedicaments(data, filtres = {}) {
   doc.save(`suivi-medicaments-${data.periode.debut}-au-${data.periode.fin}.pdf`);
 }
 
+const STATUT_STOCK_PDF = {
+  RUPTURE: { label: 'Rupture', couleur: [220, 53, 69] },
+  ALERTE: { label: 'Stock bas', couleur: [230, 150, 0] },
+  OK: { label: 'Disponible', couleur: [25, 135, 84] },
+  NON_SUIVI: { label: 'Non suivi', couleur: [120, 120, 120] },
+};
+
+// Etat du stock des medicaments (inventaire imprimable).
+export async function generatePDFEtatStock(etat, lignes) {
+  await logoReady;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  const W = 297;
+  const H = 210;
+  const largeur = W - MARGIN * 2;
+  const jj = (iso) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '-');
+  const maintenant = new Date();
+
+  // En-tete (format paysage : addHeader suppose le portrait)
+  let x0 = MARGIN;
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'JPEG', MARGIN, MARGIN, 16, 16);
+      x0 = MARGIN + 20;
+    } catch {
+      // logo illisible : ignore
+    }
+  }
+  doc.setFontSize(14);
+  doc.setFont(undefined, 'bold');
+  doc.text('CLINIQUE SOPE NABY', x0, MARGIN + 4);
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
+  doc.text('Tel : +221 33 836 29 79', x0, MARGIN + 9);
+  doc.text('Email : cliniquenaby13@gmail.com', x0, MARGIN + 14);
+  doc.setFontSize(13);
+  doc.setFont(undefined, 'bold');
+  doc.text('ETAT DU STOCK DES MEDICAMENTS', W - MARGIN, MARGIN + 4, { align: 'right' });
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Edite le ${maintenant.toLocaleDateString('fr-FR')} a ${maintenant.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`, W - MARGIN, MARGIN + 10, { align: 'right' });
+  doc.setDrawColor(...BLUE);
+  doc.setLineWidth(1);
+  doc.line(MARGIN, MARGIN + 19, W - MARGIN, MARGIN + 19);
+  let y = MARGIN + 25;
+
+  const r = etat.resume;
+  doc.setFontSize(9);
+  doc.text(
+    `Medicaments suivis : ${r.nbSuivis} / ${r.nbMedicaments}     En rupture : ${r.nbRupture}     Stock bas : ${r.nbAlerte}     ` +
+      `Peremption proche : ${r.nbPeremptionProche}     Lots perimes : ${r.nbLotsPerimes}     Unites en stock : ${r.quantiteEnStock}`,
+    MARGIN,
+    y
+  );
+  y += 6;
+
+  const col = [
+    ['Medicament', MARGIN + 2, null, 88],
+    ['Stock', MARGIN + 107, 'right'],
+    ['Seuil', MARGIN + 122, 'right'],
+    ['Statut', MARGIN + 127],
+    ['Entrees', MARGIN + 165, 'right'],
+    ['Ventes', MARGIN + 182, 'right'],
+    ['Sorties', MARGIN + 199, 'right'],
+    ['Ajust.', MARGIN + 214, 'right'],
+    ['Conso/j', MARGIN + 231, 'right'],
+    ['Peremption', MARGIN + 236],
+  ];
+  const entete = () => {
+    doc.setFillColor(...HEADER_BLUE);
+    doc.rect(MARGIN, y, largeur, 7, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(8.5);
+    col.forEach(([t, x, align]) => doc.text(t, x, y + 5, align ? { align } : undefined));
+    doc.setTextColor(0, 0, 0);
+    doc.setFont(undefined, 'normal');
+    y += 7;
+  };
+  entete();
+
+  lignes.forEach((m, idx) => {
+    if (y > H - 20) {
+      doc.addPage();
+      y = MARGIN;
+      entete();
+    }
+    if (idx % 2 === 1) {
+      doc.setFillColor(245, 247, 250);
+      doc.rect(MARGIN, y, largeur, 6.5, 'F');
+    }
+    const st = STATUT_STOCK_PDF[m.statut] ?? STATUT_STOCK_PDF.NON_SUIVI;
+    const valeurs = [
+      m.nom,
+      m.statut === 'NON_SUIVI' ? '-' : m.stock,
+      m.seuilAlerte ?? '-',
+      st.label,
+      m.entrees,
+      m.vendus,
+      m.sorties,
+      m.ajustements,
+      m.consommationJour,
+      `${jj(m.prochainePeremption)}${m.lotsPerimes ? ` (${m.lotsPerimes} perime)` : ''}`,
+    ];
+    doc.setFontSize(8.5);
+    col.forEach(([, x, align, maxLargeur], i) => {
+      let texte = String(valeurs[i] ?? '');
+      if (maxLargeur) texte = doc.splitTextToSize(texte, maxLargeur)[0] ?? '';
+      if (i === 3) {
+        doc.setTextColor(...st.couleur);
+        doc.setFont(undefined, 'bold');
+      }
+      doc.text(texte, x, y + 4.5, align ? { align } : undefined);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont(undefined, 'normal');
+    });
+    y += 6.5;
+  });
+
+  const nbPages = doc.getNumberOfPages();
+  for (let i = 1; i <= nbPages; i += 1) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text('Genere par CLINIQUE SOPE NABY', MARGIN, H - 8);
+    doc.text(`Page ${i} / ${nbPages}`, W - MARGIN, H - 8, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  doc.save(`etat-stock-medicaments-${maintenant.toISOString().slice(0, 10)}.pdf`);
+}
+
 export async function generatePDFCatalogue(items, tarifs, categorie) {
   await logoReady;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });

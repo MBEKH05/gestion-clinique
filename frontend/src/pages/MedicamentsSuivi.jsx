@@ -117,6 +117,9 @@ export default function MedicamentsSuivi() {
           <i className="bi bi-capsule me-2"></i>Suivi des medicaments
         </h2>
         <div className="d-flex gap-2">
+          <Link to="/medicaments/stock" className="btn btn-outline-primary">
+            <i className="bi bi-boxes me-1"></i>Stock
+          </Link>
           <Link to="/base-de-donnees/medicament" className="btn btn-outline-secondary">
             <i className="bi bi-arrow-left me-1"></i>Liste des medicaments
           </Link>

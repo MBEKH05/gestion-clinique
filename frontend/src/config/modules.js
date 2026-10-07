@@ -27,6 +27,7 @@ const FACTURATION_MODULE = {
         { to: '/devis/proforma', label: 'Demande Devis', icon: 'bi-file-earmark-plus' },
         { to: '/devis/mensuel', label: 'Factures Mensuelles', icon: 'bi-calendar-month' },
         { to: '/medicaments/suivi', label: 'Suivi medicaments', icon: 'bi-capsule' },
+        { to: '/medicaments/stock', label: 'Stock medicaments', icon: 'bi-boxes' },
         { to: '/detail-prestation', label: 'Detail de prestation', icon: 'bi-calendar-check', adminOnly: true },
         { to: '/statistiques', label: 'Statistiques', icon: 'bi-bar-chart', adminOnly: true },
       ],

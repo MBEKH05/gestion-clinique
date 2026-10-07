@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\DevisController;
 use App\Http\Controllers\Api\FactureMensuelleController;
 use App\Http\Controllers\Api\IpmController;
 use App\Http\Controllers\Api\MedicamentController;
+use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\Lab\LabAuthController;
 use App\Http\Controllers\Api\Lab\LabDocumentAnnexeController;
 use App\Http\Controllers\Api\Lab\LabDossierController;
@@ -58,6 +59,13 @@ Route::middleware('auth:api')->group(function () {
     Route::get('dashboard-stats', [DashboardController::class, 'stats']);
 
     Route::get('medicaments/suivi', [MedicamentController::class, 'suivi']);
+
+    Route::get('stock/medicaments', [StockController::class, 'index']);
+    Route::get('stock/mouvements', [StockController::class, 'mouvements']);
+    Route::post('stock/mouvements', [StockController::class, 'store']);
+    Route::get('stock/lots', [StockController::class, 'lots']);
+    Route::put('stock/medicaments/{id}/seuil', [StockController::class, 'updateSeuil']);
+    Route::middleware('admin')->delete('stock/mouvements/{id}', [StockController::class, 'destroy']);
 
     Route::get('factures-mensuelles/numero', [FactureMensuelleController::class, 'numero']);
 

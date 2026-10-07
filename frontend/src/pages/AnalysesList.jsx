@@ -35,9 +35,14 @@ export default function AnalysesList() {
         </h2>
         <div className="d-flex gap-2">
           {category === 'medicament' && (
-            <Link to="/medicaments/suivi" className="btn btn-outline-success">
-              <i className="bi bi-graph-up me-1"></i>Suivi des ventes
-            </Link>
+            <>
+              <Link to="/medicaments/stock" className="btn btn-outline-primary">
+                <i className="bi bi-boxes me-1"></i>Stock
+              </Link>
+              <Link to="/medicaments/suivi" className="btn btn-outline-success">
+                <i className="bi bi-graph-up me-1"></i>Suivi des ventes
+              </Link>
+            </>
           )}
           <button
             className="btn btn-outline-danger"
