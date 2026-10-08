@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { generatePDFCatalogue } from '../utils/pdfUtils';
 
 export default function AnalysesList() {
   const { category } = useParams();
   const { analyses, tarifs, deleteAnalyse } = useData();
+  const { isSuperAdmin } = useAuth();
   const [search, setSearch] = useState('');
   const [exporting, setExporting] = useState(false);
 
@@ -34,7 +36,7 @@ export default function AnalysesList() {
           {category} <span className="badge bg-secondary">{filtered.length}</span>
         </h2>
         <div className="d-flex gap-2">
-          {category === 'medicament' && (
+          {category === 'medicament' && isSuperAdmin && (
             <>
               <Link to="/medicaments/stock" className="btn btn-outline-primary">
                 <i className="bi bi-boxes me-1"></i>Stock

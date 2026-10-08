@@ -99,8 +99,22 @@ export default function App() {
               }
             />
 
-            <Route path="/medicaments/suivi" element={<MedicamentsSuivi />} />
-            <Route path="/medicaments/stock" element={<StockMedicaments />} />
+            <Route
+              path="/medicaments/suivi"
+              element={
+                <ProtectedRoute adminOnly>
+                  <MedicamentsSuivi />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/medicaments/stock"
+              element={
+                <ProtectedRoute adminOnly>
+                  <StockMedicaments />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/base-de-donnees/:category" element={<AnalysesList />} />
             <Route path="/base-de-donnees/:category/ajouter" element={<AnalysesForm />} />
             <Route path="/base-de-donnees/:category/:id/modifier" element={<AnalysesForm />} />
@@ -128,7 +142,14 @@ export default function App() {
 
             <Route path="/devis" element={<DevisList />} />
             <Route path="/devis/creer" element={<DevisForm />} />
-            <Route path="/devis/mensuel" element={<DevisMensuel />} />
+            <Route
+              path="/devis/mensuel"
+              element={
+                <ProtectedRoute adminOnly>
+                  <DevisMensuel />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/devis/proforma" element={<DevisProformaList />} />
             <Route path="/devis/proforma/creer" element={<DevisProformaForm />} />
             <Route path="/devis/proforma/:id/modifier" element={<DevisProformaForm />} />

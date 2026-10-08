@@ -11,7 +11,6 @@ export default function CaisseTarifs() {
   const [newCategorie, setNewCategorie] = useState('');
   const [newAnalyseId, setNewAnalyseId] = useState('');
   const [newPrix, setNewPrix] = useState('');
-  const [importing, setImporting] = useState(false);
 
   const categorieNames = categories.length ? categories.map(getCategoryName) : CATEGORY_ORDER;
 
@@ -63,19 +62,6 @@ export default function CaisseTarifs() {
   const handleDeleteTarif = async (tarif) => {
     if (!window.confirm('Supprimer ce tarif ?')) return;
     await deleteTarif(tarif.id);
-  };
-
-  const handleImport = async () => {
-    if (!window.confirm('Ajouter toutes les analyses sans prix Caisse (prix a 0) ?')) return;
-    setImporting(true);
-    try {
-      const missing = analyses.filter((a) => !tarifsParAnalyse.get(a.id));
-      for (const a of missing) {
-        await addTarif({ analyseId: a.id, typePriseEnCharge: 'CAISSE', prix: 0 });
-      }
-    } finally {
-      setImporting(false);
-    }
   };
 
   return (
@@ -172,9 +158,6 @@ export default function CaisseTarifs() {
           <span className="badge bg-primary">
             {countAvecPrix} / {analyses.length} analyses avec prix
           </span>
-          <button className="btn btn-outline-success btn-sm" onClick={handleImport} disabled={importing}>
-            Importer les analyses standard
-          </button>
         </div>
       </div>
 

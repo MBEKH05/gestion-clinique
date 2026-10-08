@@ -58,14 +58,19 @@ Route::middleware('auth:api')->group(function () {
 
     Route::get('dashboard-stats', [DashboardController::class, 'stats']);
 
-    Route::get('medicaments/suivi', [MedicamentController::class, 'suivi']);
+    // Suivi / stock des medicaments et factures mensuelles : reserves au Super Admin
+    // (les comptes Manager - secretaires - n'y ont pas acces).
+    Route::middleware('admin')->group(function () {
+        Route::get('medicaments/suivi', [MedicamentController::class, 'suivi']);
 
-    Route::get('stock/medicaments', [StockController::class, 'index']);
-    Route::get('stock/mouvements', [StockController::class, 'mouvements']);
-    Route::post('stock/mouvements', [StockController::class, 'store']);
-    Route::get('stock/lots', [StockController::class, 'lots']);
-    Route::put('stock/medicaments/{id}/seuil', [StockController::class, 'updateSeuil']);
-    Route::middleware('admin')->delete('stock/mouvements/{id}', [StockController::class, 'destroy']);
+        Route::get('stock/medicaments', [StockController::class, 'index']);
+        Route::get('stock/mouvements', [StockController::class, 'mouvements']);
+        Route::post('stock/mouvements', [StockController::class, 'store']);
+        Route::get('stock/lots', [StockController::class, 'lots']);
+        Route::put('stock/medicaments/{id}/seuil', [StockController::class, 'updateSeuil']);
+        Route::delete('stock/mouvements/{id}', [StockController::class, 'destroy']);
+
+        });
 
     Route::get('factures-mensuelles/numero', [FactureMensuelleController::class, 'numero']);
 
