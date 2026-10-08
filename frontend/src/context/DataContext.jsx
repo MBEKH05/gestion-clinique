@@ -23,7 +23,7 @@ import {
 
 const DataContext = createContext(null);
 
-const CACHE_KEY = 'facturation_clinique_cache_v2';
+const CACHE_KEY = 'facturation_clinique_cache_v3';
 const CACHE_TTL_SECONDS = 3600;
 
 function readCache() {

@@ -7,7 +7,7 @@ export const authAPI = {
 };
 
 export const analysesAPI = {
-  getAll: () => api.get('/analyses', { params: { page_size: 1000 } }),
+  getAll: () => api.get('/analyses', { params: { page_size: 5000 } }),
   get: (id) => api.get(`/analyses/${id}`),
   create: (data) => api.post('/analyses', data),
   update: (id, data) => api.put(`/analyses/${id}`, data),
@@ -15,7 +15,7 @@ export const analysesAPI = {
 };
 
 export const ipmsAPI = {
-  getAll: () => api.get('/ipms', { params: { page_size: 1000 } }),
+  getAll: () => api.get('/ipms', { params: { page_size: 5000 } }),
   get: (id) => api.get(`/ipms/${id}`),
   create: (data) => api.post('/ipms', data),
   update: (id, data) => api.put(`/ipms/${id}`, data),
@@ -25,7 +25,7 @@ export const ipmsAPI = {
 };
 
 export const assurancesAPI = {
-  getAll: () => api.get('/assurances', { params: { page_size: 1000 } }),
+  getAll: () => api.get('/assurances', { params: { page_size: 5000 } }),
   get: (id) => api.get(`/assurances/${id}`),
   create: (data) => api.post('/assurances', data),
   update: (id, data) => api.put(`/assurances/${id}`, data),
@@ -35,8 +35,8 @@ export const assurancesAPI = {
 };
 
 export const tarifsAPI = {
-  getAll: () => api.get('/tarifs', { params: { page_size: 1000 } }),
-  getFresh: () => api.get('/tarifs', { params: { page_size: 1000, _t: Date.now() } }),
+  getAll: () => api.get('/tarifs', { params: { page_size: 5000 } }),
+  getFresh: () => api.get('/tarifs', { params: { page_size: 5000, _t: Date.now() } }),
   create: (data) => api.post('/tarifs', data),
   update: (id, data) => api.put(`/tarifs/${id}`, data),
   remove: (id) => api.delete(`/tarifs/${id}`),
