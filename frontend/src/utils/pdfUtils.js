@@ -733,3 +733,197 @@ export async function generatePDFCatalogue(items, tarifs, categorie) {
 
   doc.save(`catalogue-${categorie}-${dateStr.replace(/\//g, '-')}.pdf`);
 }
+
+// Rapport d'activite d'un compte (secretaire / Manager) : resume, repartition,
+// detail par jour, patients enregistres puis devis et leur prise en charge.
+export async function generatePDFRapportActivite(rapport) {
+  await logoReady;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const largeur = PAGE_WIDTH - MARGIN * 2;
+  const D = PAGE_WIDTH - MARGIN - 2;
+  const jj = (iso) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '-');
+  const compte = rapport.compte || {};
+  const t = rapport.totaux;
+
+  let y = addHeader(doc, MARGIN + 4, "RAPPORT D'ACTIVITE", [
+    `Du ${jj(rapport.periode.debut)} au ${jj(rapport.periode.fin)}`,
+    `Edite le ${new Date().toLocaleDateString('fr-FR')}`,
+  ]);
+
+  // Bandeau : compte concerne
+  doc.setFillColor(235, 241, 252);
+  doc.rect(MARGIN, y - 2, largeur, 10, 'F');
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(...BLUE);
+  const nomCompte = compte.name && compte.name.toLowerCase() !== String(compte.username).toLowerCase() ? `${compte.username} (${compte.name})` : compte.username;
+  doc.text(`Compte : ${nomCompte || '-'}  -  ${compte.role || ''}`, PAGE_WIDTH / 2, y + 4.5, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  y += 14;
+
+  // Resume en cases (2 lignes de 3)
+  const cases = [
+    ['Patients enregistres', String(t.patients)],
+    ['Devis etablis', String(t.devis)],
+    ['Montant total', `${formatMontantPDF(t.montantTotal)} FCFA`],
+    ['Part prise en charge', `${formatMontantPDF(t.partCouverte)} FCFA`],
+    ['Part patient', `${formatMontantPDF(t.partPatient)} FCFA`],
+    [
+      'Patients IPM / Assur. / Caisse',
+      `${t.patientsParType.IPM ?? 0} / ${t.patientsParType.ASSURANCE ?? 0} / ${t.patientsParType.CAISSE ?? 0}`,
+    ],
+  ];
+  const lc = (largeur - 6) / 3;
+  cases.forEach(([label, valeur], i) => {
+    const x = MARGIN + (i % 3) * (lc + 3);
+    const yc = y + Math.floor(i / 3) * 16;
+    doc.setDrawColor(...BLUE);
+    doc.setLineWidth(0.4);
+    doc.rect(x, yc, lc, 13);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(label, x + 3, yc + 5);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(...BLUE);
+    doc.text(valeur, x + 3, yc + 10.5);
+  });
+  doc.setTextColor(0, 0, 0);
+  y += 35;
+
+  // colonnes : [titre, x, alignement, largeurMax]
+  const tableau = (titre, colonnes, lignes, vide, piedDeTableau) => {
+    if (y > PAGE_HEIGHT - 40) {
+      doc.addPage();
+      y = MARGIN + 5;
+    }
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...BLUE);
+    doc.text(titre, MARGIN, y);
+    doc.setTextColor(0, 0, 0);
+    y += 3;
+    const entete = () => {
+      doc.setFillColor(...HEADER_BLUE);
+      doc.rect(MARGIN, y, largeur, 6.5, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(8);
+      colonnes.forEach(([c, x, align]) => doc.text(c, x, y + 4.5, align ? { align } : undefined));
+      doc.setTextColor(0, 0, 0);
+      doc.setFont(undefined, 'normal');
+      y += 6.5;
+    };
+    entete();
+    const ligneTexte = (ligne) =>
+      colonnes.forEach(([, x, align, maxLargeur], i) => {
+        let texte = String(ligne[i] ?? '');
+        if (maxLargeur) texte = doc.splitTextToSize(texte, maxLargeur)[0] ?? '';
+        doc.text(texte, x, y + 4.2, align ? { align } : undefined);
+      });
+    lignes.forEach((ligne, idx) => {
+      if (y > PAGE_HEIGHT - 22) {
+        doc.addPage();
+        y = MARGIN + 5;
+        entete();
+      }
+      if (idx % 2 === 1) {
+        doc.setFillColor(245, 247, 250);
+        doc.rect(MARGIN, y, largeur, 6, 'F');
+      }
+      doc.setFontSize(8);
+      ligneTexte(ligne);
+      y += 6;
+    });
+    if (lignes.length === 0) {
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text(vide, MARGIN + 2, y + 4.5);
+      doc.setTextColor(0, 0, 0);
+      y += 6;
+    } else if (piedDeTableau) {
+      if (y > PAGE_HEIGHT - 22) {
+        doc.addPage();
+        y = MARGIN + 5;
+      }
+      doc.setFillColor(235, 241, 252);
+      doc.rect(MARGIN, y, largeur, 7, 'F');
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(8);
+      ligneTexte(piedDeTableau);
+      doc.setFont(undefined, 'normal');
+      y += 7;
+    }
+    y += 6;
+  };
+
+  tableau(
+    'Detail par jour',
+    [['Date', MARGIN + 2], ['Patients', MARGIN + 90, 'right'], ['Devis', MARGIN + 125, 'right'], ['Montant (FCFA)', D, 'right']],
+    rapport.parJour.map((j) => [jj(j.date), j.patients, j.devis, formatMontantPDF(j.montant)]),
+    'Aucune activite sur cette periode.',
+    ['TOTAL', t.patients, t.devis, formatMontantPDF(t.montantTotal)]
+  );
+
+  tableau(
+    'Patients enregistres',
+    [
+      ['N°', MARGIN + 2],
+      ['Date', MARGIN + 11],
+      ['Patient', MARGIN + 30, null, 60],
+      ['Matricule', MARGIN + 93, null, 27],
+      ['Prise en charge', MARGIN + 122],
+      ['IPM / Assurance', MARGIN + 146, null, 33],
+    ],
+    rapport.patients.map((p, i) => [
+      i + 1,
+      jj(p.date),
+      p.nomComplet,
+      p.matricule || '-',
+      TYPE_LABELS_PDF[p.typePriseEnCharge] || p.typePriseEnCharge,
+      p.entiteNom || '-',
+    ]),
+    'Aucun patient enregistre sur cette periode.'
+  );
+
+  tableau(
+    'Devis et prise en charge',
+    [
+      ['Date', MARGIN + 1],
+      ['N° devis', MARGIN + 17],
+      ['Patient', MARGIN + 37, null, 38],
+      ['Prise en charge', MARGIN + 77, null, 30],
+      ['Total', MARGIN + 121, 'right'],
+      ['Part PEC', MARGIN + 140, 'right'],
+      ['Part patient', MARGIN + 162, 'right'],
+      ['Statut', MARGIN + 165],
+    ],
+    rapport.devis.map((d) => [
+      jj(d.date),
+      getDevisNumero(d),
+      d.patientNom || '-',
+      d.typePriseEnCharge === 'CAISSE' ? 'Caisse' : d.entiteNom || TYPE_LABELS_PDF[d.typePriseEnCharge] || '-',
+      formatMontantPDF(d.total),
+      formatMontantPDF(d.partCouverte),
+      `${formatMontantPDF(d.partPatient)}${d.tauxCouverture ? ` (${d.tauxCouverture}%)` : ''}`,
+      { REGLE: 'Regle', PARTIELLEMENT_REGLE: 'Partiel' }[d.statutPaiement] ?? 'Non regle',
+    ]),
+    'Aucun devis etabli sur cette periode.',
+    ['TOTAL', '', '', '', formatMontantPDF(t.montantTotal), formatMontantPDF(t.partCouverte), formatMontantPDF(t.partPatient), '']
+  );
+
+  const nbPages = doc.getNumberOfPages();
+  for (let i = 1; i <= nbPages; i += 1) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(120, 120, 120);
+    doc.text('Genere par CLINIQUE SOPE NABY', MARGIN, PAGE_HEIGHT - 10);
+    doc.text(`Page ${i} / ${nbPages}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 10, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  const slug = String(compte.username || 'compte').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  doc.save(`rapport-activite-${slug}-${rapport.periode.debut}-au-${rapport.periode.fin}.pdf`);
+}

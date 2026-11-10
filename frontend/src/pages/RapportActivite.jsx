@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { rapportActiviteAPI } from '../api/endpoints';
 import { useAuth } from '../context/AuthContext';
 import { formatMontant, getDevisNumero } from '../utils/devisUtils';
+import { generatePDFRapportActivite } from '../utils/pdfUtils';
 
 const STATUT_LABELS = {
   NON_REGLE: { label: 'Non regle', className: 'badge-danger' },
@@ -54,6 +55,17 @@ export default function RapportActivite() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [onglet, setOnglet] = useState('patients');
+  const [pdfEnCours, setPdfEnCours] = useState(false);
+
+  const telechargerPDF = async () => {
+    if (!rapport) return;
+    setPdfEnCours(true);
+    try {
+      await generatePDFRapportActivite(rapport);
+    } finally {
+      setPdfEnCours(false);
+    }
+  };
 
   const changerPreset = (p) => {
     setPreset(p);
@@ -93,7 +105,15 @@ export default function RapportActivite() {
 
   return (
     <div>
-      <h2 className="mb-4">{isSuperAdmin ? "Rapport d'activite des comptes" : 'Mon rapport'}</h2>
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <h2 className="mb-0">{isSuperAdmin ? "Rapport d'activite des comptes" : 'Mon rapport'}</h2>
+        {!isSuperAdmin && (
+          <button className="btn btn-outline-primary" onClick={telechargerPDF} disabled={!rapport || loading || pdfEnCours}>
+            <i className="bi bi-file-earmark-pdf me-2"></i>
+            {pdfEnCours ? 'Generation...' : 'Telecharger le PDF'}
+          </button>
+        )}
+      </div>
 
       <div className="card shadow-sm mb-4">
         <div className="card-body">
@@ -204,7 +224,15 @@ export default function RapportActivite() {
       ) : (
         rapport && (
           <>
-            {isSuperAdmin && <h4 className="mb-3">{titreCompte}</h4>}
+            {isSuperAdmin && (
+              <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h4 className="mb-0">{titreCompte}</h4>
+                <button className="btn btn-outline-primary btn-sm" onClick={telechargerPDF} disabled={pdfEnCours}>
+                  <i className="bi bi-file-earmark-pdf me-2"></i>
+                  {pdfEnCours ? 'Generation...' : `PDF de ${rapport.compte?.username}`}
+                </button>
+              </div>
+            )}
 
             <div className="row g-3 mb-4">
               <Kpi label="Patients enregistres" value={t.patients} highlight />
