@@ -61,6 +61,7 @@ class PatientController extends Controller
             'type_prise_en_charge' => $type,
             'ipm_id' => $request->input('ipm') ?: null,
             'assurance_id' => $request->input('assurance') ?: null,
+            'created_by' => $request->user()?->id,
         ]);
 
         return PatientResource::make($patient)->response()->setStatusCode(201);

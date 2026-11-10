@@ -88,6 +88,11 @@ export const dashboardAPI = {
   getStats: () => api.get('/dashboard-stats'),
 };
 
+export const rapportActiviteAPI = {
+  get: (params) => api.get('/rapport-activite', { params: { ...params, _t: Date.now() } }),
+  getResume: (params) => api.get('/rapport-activite/resume', { params: { ...params, _t: Date.now() } }),
+};
+
 export const statistiquesAPI = {
   getPaiement: (params) => api.get('/statistiques/paiement', { params }),
   getFacturesMensuelles: (params) => api.get('/statistiques/factures-mensuelles', { params }),

@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\Lab\LabDossierController;
 use App\Http\Controllers\Api\Lab\LabStatsController;
 use App\Http\Controllers\Api\Lab\LabUserController;
 use App\Http\Controllers\Api\PatientController;
+use App\Http\Controllers\Api\RapportSecretaireController;
 use App\Http\Controllers\Api\StatistiqueController;
 use App\Http\Controllers\Api\TarifController;
 use Illuminate\Support\Facades\Route;
@@ -57,6 +58,10 @@ Route::middleware('auth:api')->group(function () {
     Route::middleware('admin')->delete('devis/{id}', [DevisController::class, 'destroy']);
 
     Route::get('dashboard-stats', [DashboardController::class, 'stats']);
+
+    // Rapport d'activite : chaque compte voit le sien, le Super Admin voit tout.
+    Route::get('rapport-activite', [RapportSecretaireController::class, 'show']);
+    Route::middleware('admin')->get('rapport-activite/resume', [RapportSecretaireController::class, 'resume']);
 
     // Suivi / stock des medicaments et factures mensuelles : reserves au Super Admin
     // (les comptes Manager - secretaires - n'y ont pas acces).

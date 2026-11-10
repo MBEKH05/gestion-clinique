@@ -133,7 +133,9 @@ class DevisController extends Controller
     {
         $data = $this->validateDevisPayload($request);
 
-        $devis = DB::transaction(function () use ($data) {
+        $userId = $request->user()?->id;
+
+        $devis = DB::transaction(function () use ($data, $userId) {
             $numero = $this->genererNumero();
 
             $devis = Devis::create([
@@ -144,6 +146,7 @@ class DevisController extends Controller
                 'taux_couverture' => $data['taux_couverture'],
                 'is_proforma' => $data['is_proforma'],
                 'total' => 0,
+                'created_by' => $userId,
             ]);
 
             $total = $this->creerLignes($devis, $data['lignes']);

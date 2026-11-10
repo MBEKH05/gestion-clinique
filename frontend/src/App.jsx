@@ -30,6 +30,7 @@ import DevisProformaForm from './pages/DevisProformaForm';
 import DevisMensuel from './pages/DevisMensuel';
 import Statistiques from './pages/Statistiques';
 import DetailPrestation from './pages/DetailPrestation';
+import RapportActivite from './pages/RapportActivite';
 
 import TechnicienDossiers from './pages/lab/TechnicienDossiers';
 import MedecinDossiers from './pages/lab/MedecinDossiers';
@@ -172,6 +173,8 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+
+            <Route path="/rapport-activite" element={<RapportActivite />} />
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>

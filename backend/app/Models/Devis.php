@@ -27,6 +27,7 @@ class Devis extends Model
         'date_paiement',
         'commentaire_paiement',
         'is_proforma',
+        'created_by',
     ];
 
     protected function casts(): array
@@ -42,6 +43,11 @@ class Devis extends Model
     public function patient()
     {
         return $this->belongsTo(Patient::class, 'patient_id');
+    }
+
+    public function createur()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function lignes()
