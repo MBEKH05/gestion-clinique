@@ -9,6 +9,7 @@ use App\Models\Ipm;
 use App\Support\FactureNumero;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class StatistiqueController extends Controller
 {
@@ -215,5 +216,85 @@ class StatistiqueController extends Controller
             $valeur === 'REGLE' || $valeur === 'PAYE' => 'REGLE',
             default => 'NON_REGLE',
         };
+    }
+
+    /**
+     * Detail des prestations d'une categorie (table categories) sur une periode :
+     * pour chaque prestation, une ligne par jour avec le nombre de patients,
+     * le nombre de prestations (somme des quantites) et le prix (prix x quantite).
+     * Les devis proforma sont exclus.
+     */
+    public function prestations(Request $request)
+    {
+        $data = $request->validate([
+            'categorie' => 'required|string|exists:categories,nom',
+            'date_debut' => 'required|date',
+            'date_fin' => 'required|date|after_or_equal:date_debut',
+        ]);
+
+        $debut = Carbon::parse($data['date_debut'])->startOfDay();
+        $fin = Carbon::parse($data['date_fin'])->endOfDay();
+
+        $lignes = DB::table('devis_lignes as l')
+            ->join('devis as d', 'd.id', '=', 'l.devis_id')
+            ->join('analyses as a', 'a.id', '=', 'l.analyse_id')
+            ->where('a.categorie', $data['categorie'])
+            ->where('d.is_proforma', false)
+            ->where('l.prix', '>', 0)
+            ->whereBetween('d.date_creation', [$debut, $fin]);
+
+        $parJour = (clone $lignes)
+            ->groupBy('a.id', 'a.nom', DB::raw('DATE(d.date_creation)'))
+            ->orderBy('a.nom')
+            ->orderBy(DB::raw('DATE(d.date_creation)'))
+            ->get([
+                'a.id',
+                'a.nom',
+                DB::raw('DATE(d.date_creation) as jour'),
+                DB::raw('COUNT(DISTINCT d.patient_id) as nb_patients'),
+                DB::raw('SUM(l.quantite) as nb_prestations'),
+                DB::raw('SUM(l.prix * l.quantite) as montant'),
+            ]);
+
+        // Patients distincts par prestation sur toute la periode (un patient venu deux jours compte une fois).
+        $patientsParService = (clone $lignes)
+            ->groupBy('a.id')
+            ->get(['a.id', DB::raw('COUNT(DISTINCT d.patient_id) as nb')])
+            ->pluck('nb', 'id');
+
+        $services = $parJour->groupBy('id')->map(function ($jours, $id) use ($patientsParService) {
+            $liste = $jours->map(fn ($j) => [
+                'date' => (string) $j->jour,
+                'nbPatients' => (int) $j->nb_patients,
+                'nbPrestations' => (int) $j->nb_prestations,
+                'montant' => round((float) $j->montant, 2),
+            ])->values();
+
+            return [
+                'id' => $id,
+                'nom' => $jours->first()->nom,
+                'jours' => $liste,
+                'nbPatients' => (int) ($patientsParService[$id] ?? 0),
+                'nbPrestations' => $liste->sum('nbPrestations'),
+                'montant' => round($liste->sum('montant'), 2),
+            ];
+        })->values();
+
+        $totaux = (clone $lignes)->first([
+            DB::raw('COUNT(DISTINCT d.patient_id) as nb_patients'),
+            DB::raw('COALESCE(SUM(l.quantite), 0) as nb_prestations'),
+            DB::raw('COALESCE(SUM(l.prix * l.quantite), 0) as montant'),
+        ]);
+
+        return response()->json([
+            'categorie' => $data['categorie'],
+            'periode' => ['debut' => $debut->toDateString(), 'fin' => $fin->toDateString()],
+            'services' => $services,
+            'totaux' => [
+                'nbPatients' => (int) $totaux->nb_patients,
+                'nbPrestations' => (int) $totaux->nb_prestations,
+                'montant' => round((float) $totaux->montant, 2),
+            ],
+        ]);
     }
 }

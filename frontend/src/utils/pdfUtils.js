@@ -927,3 +927,117 @@ export async function generatePDFRapportActivite(rapport) {
   const slug = String(compte.username || 'compte').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   doc.save(`rapport-activite-${slug}-${rapport.periode.debut}-au-${rapport.periode.fin}.pdf`);
 }
+
+// Detail de prestation : une categorie sur une periode, un tableau par prestation
+// avec une ligne par jour (nb patients, nb prestations, prix x quantite).
+export async function generatePDFDetailPrestation(resultat) {
+  await logoReady;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const largeur = PAGE_WIDTH - MARGIN * 2;
+  const D = PAGE_WIDTH - MARGIN - 2;
+  const jj = (iso) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '-');
+  const categorie = String(resultat.categorie || '');
+  const nomCategorie = categorie.charAt(0).toUpperCase() + categorie.slice(1);
+  const t = resultat.totaux;
+  const colonnes = [
+    ['Date', MARGIN + 2],
+    ['Nb patients', MARGIN + 85, 'right'],
+    ['Nb prestations', MARGIN + 125, 'right'],
+    ['Prix (FCFA)', D, 'right'],
+  ];
+
+  let y = addHeader(doc, MARGIN + 4, 'DETAIL DE PRESTATION', [
+    `Du ${jj(resultat.periode.debut)} au ${jj(resultat.periode.fin)}`,
+    `Edite le ${new Date().toLocaleDateString('fr-FR')}`,
+  ]);
+
+  // Bandeau : categorie
+  doc.setFillColor(235, 241, 252);
+  doc.rect(MARGIN, y - 2, largeur, 10, 'F');
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(...BLUE);
+  doc.text(`Categorie : ${nomCategorie}`, PAGE_WIDTH / 2, y + 4.5, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  y += 16;
+
+  const sautSiBesoin = (hauteur) => {
+    if (y + hauteur > PAGE_HEIGHT - 20) {
+      doc.addPage();
+      y = MARGIN + 5;
+      return true;
+    }
+    return false;
+  };
+  const entete = () => {
+    doc.setFillColor(...HEADER_BLUE);
+    doc.rect(MARGIN, y, largeur, 6.5, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(8);
+    colonnes.forEach(([c, x, align]) => doc.text(c, x, y + 4.5, align ? { align } : undefined));
+    doc.setTextColor(0, 0, 0);
+    doc.setFont(undefined, 'normal');
+    y += 6.5;
+  };
+  const ligne = (valeurs) =>
+    colonnes.forEach(([, x, align], i) => doc.text(String(valeurs[i] ?? ''), x, y + 4.2, align ? { align } : undefined));
+
+  resultat.services.forEach((s) => {
+    sautSiBesoin(30);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...BLUE);
+    doc.text(doc.splitTextToSize(s.nom, largeur)[0] ?? '', MARGIN, y);
+    doc.setTextColor(0, 0, 0);
+    y += 3;
+    entete();
+    s.jours.forEach((j, idx) => {
+      if (sautSiBesoin(6)) entete();
+      if (idx % 2 === 1) {
+        doc.setFillColor(245, 247, 250);
+        doc.rect(MARGIN, y, largeur, 6, 'F');
+      }
+      doc.setFontSize(8);
+      ligne([jj(j.date), j.nbPatients, j.nbPrestations, formatMontantPDF(j.montant)]);
+      y += 6;
+    });
+    sautSiBesoin(7);
+    doc.setFillColor(235, 241, 252);
+    doc.rect(MARGIN, y, largeur, 7, 'F');
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(8);
+    ligne(['TOTAL', s.nbPatients, s.nbPrestations, formatMontantPDF(s.montant)]);
+    doc.setFont(undefined, 'normal');
+    y += 13;
+  });
+
+  // Total general de la categorie
+  sautSiBesoin(12);
+  doc.setDrawColor(...BLUE);
+  doc.setLineWidth(0.5);
+  doc.setFillColor(...HEADER_BLUE);
+  doc.rect(MARGIN, y, largeur, 9, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(9);
+  doc.text(`TOTAL ${nomCategorie.toUpperCase()}`, MARGIN + 2, y + 6);
+  doc.text(String(t.nbPatients), MARGIN + 85, y + 6, { align: 'right' });
+  doc.text(String(t.nbPrestations), MARGIN + 125, y + 6, { align: 'right' });
+  doc.text(`${formatMontantPDF(t.montant)} FCFA`, D, y + 6, { align: 'right' });
+  doc.setTextColor(0, 0, 0);
+
+  const nbPages = doc.getNumberOfPages();
+  for (let i = 1; i <= nbPages; i += 1) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(120, 120, 120);
+    doc.text('Genere par CLINIQUE SOPE NABY', MARGIN, PAGE_HEIGHT - 10);
+    doc.text(`Page ${i} / ${nbPages}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 10, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  const slug = categorie.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'categorie';
+  doc.save(`detail-prestation-${slug}-${resultat.periode.debut}-au-${resultat.periode.fin}.pdf`);
+}

@@ -96,6 +96,7 @@ export const rapportActiviteAPI = {
 export const statistiquesAPI = {
   getPaiement: (params) => api.get('/statistiques/paiement', { params }),
   getFacturesMensuelles: (params) => api.get('/statistiques/factures-mensuelles', { params }),
+  getPrestations: (params) => api.get('/statistiques/prestations', { params }),
 };
 
 export const facturesMensuellesAPI = {

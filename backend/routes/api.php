@@ -89,6 +89,7 @@ Route::middleware('auth:api')->group(function () {
 
         Route::get('statistiques/paiement', [StatistiqueController::class, 'paiement']);
         Route::get('statistiques/factures-mensuelles', [StatistiqueController::class, 'facturesMensuelles']);
+        Route::get('statistiques/prestations', [StatistiqueController::class, 'prestations']);
     });
 });
 

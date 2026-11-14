@@ -1,285 +1,177 @@
-import { useMemo, useState } from 'react';
-import { devisAPI } from '../api/endpoints';
-import { convertDevisFromAPI } from '../utils/apiConverters';
+import { useEffect, useState } from 'react';
+import { categoriesAPI, statistiquesAPI } from '../api/endpoints';
 import { formatMontant } from '../utils/devisUtils';
+import { generatePDFDetailPrestation } from '../utils/pdfUtils';
 
+const aujourdhui = () => new Date().toISOString().slice(0, 10);
+const debutDuMois = () => `${aujourdhui().slice(0, 7)}-01`;
+const dateFr = (iso) => iso.split('-').reverse().join('/');
+
+// Detail des prestations d'une categorie (choisie dans la base) sur une periode :
+// pour chaque prestation, une ligne par jour (nb patients, nb prestations, prix x quantite).
 export default function DetailPrestation() {
-  const [dateDebut, setDateDebut] = useState('');
-  const [dateFin, setDateFin] = useState('');
-  const [rechercheEffectuee, setRechercheEffectuee] = useState(false);
-  const [moisSelectionne, setMoisSelectionne] = useState('');
-  const [devisPeriode, setDevisPeriode] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [categorie, setCategorie] = useState('');
+  const [dateDebut, setDateDebut] = useState(debutDuMois());
+  const [dateFin, setDateFin] = useState(aujourdhui());
+  const [resultat, setResultat] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pdfEnCours, setPdfEnCours] = useState(false);
+  const [erreur, setErreur] = useState('');
+
+  useEffect(() => {
+    categoriesAPI
+      .getAll()
+      .then(({ data }) => setCategories(Array.isArray(data) ? data : data?.data || []))
+      .catch(() => setErreur('Impossible de charger les categories.'));
+  }, []);
 
   const handleSearch = async (e) => {
     e.preventDefault();
+    setErreur('');
+    if (!categorie) {
+      setErreur('Choisissez une categorie.');
+      return;
+    }
+    if (dateFin < dateDebut) {
+      setErreur('La date de fin doit etre apres la date de debut.');
+      return;
+    }
     setLoading(true);
     try {
-      const { data } = await devisAPI.getAll({
-        date_debut: dateDebut || undefined,
-        date_fin: dateFin || undefined,
-        with_lignes: 1,
-        page_size: 5000,
-        ordering: 'date_creation',
-      });
-      setDevisPeriode(data.results.map(convertDevisFromAPI));
-      setRechercheEffectuee(true);
+      const { data } = await statistiquesAPI.getPrestations({ categorie, date_debut: dateDebut, date_fin: dateFin });
+      setResultat(data);
+    } catch (err) {
+      setResultat(null);
+      setErreur(err.response?.data?.message || err.response?.data?.detail || 'Erreur lors du chargement.');
     } finally {
       setLoading(false);
     }
   };
 
-  const prestations = useMemo(() => {
-    if (!rechercheEffectuee) return [];
+  const telechargerPDF = async () => {
+    if (!resultat) return;
+    setPdfEnCours(true);
+    try {
+      await generatePDFDetailPrestation(resultat);
+    } finally {
+      setPdfEnCours(false);
+    }
+  };
 
-    const list = [];
-
-    devisPeriode.forEach((d) => {
-      if (!d.dateCreation) return;
-      const date = new Date(d.dateCreation);
-
-      d.lignes.forEach((l) => {
-        if (!l.prix || l.prix <= 0) return;
-        list.push({
-          service: l.nom,
-          categorie: l.categorie,
-          prix: l.prix,
-          quantite: l.quantite,
-          date: date.toISOString().slice(0, 10),
-          patientNom: d.patientNom || '-',
-          matricule: d.patientMatricule || '-',
-        });
-      });
-    });
-
-    return list;
-  }, [devisPeriode, rechercheEffectuee]);
-
-  const parService = useMemo(() => {
-    const map = new Map();
-    prestations.forEach((p) => {
-      if (!map.has(p.service)) map.set(p.service, { categorie: p.categorie, prixUnitaire: p.prix, dates: new Map() });
-      const entry = map.get(p.service);
-      if (!entry.dates.has(p.date)) entry.dates.set(p.date, { patients: new Set(), count: 0, total: 0 });
-      const dateEntry = entry.dates.get(p.date);
-      dateEntry.patients.add(p.matricule);
-      dateEntry.count += 1;
-      dateEntry.total += p.prix * p.quantite;
-    });
-    return map;
-  }, [prestations]);
-
-  const moisDisponibles = useMemo(() => {
-    const set = new Set(prestations.map((p) => p.date.slice(0, 7)));
-    return [...set].sort().reverse();
-  }, [prestations]);
-
-  const parJourPatient = useMemo(() => {
-    const filtered = moisSelectionne
-      ? prestations.filter((p) => p.date.startsWith(moisSelectionne))
-      : prestations;
-
-    const map = new Map();
-    filtered.forEach((p) => {
-      if (!map.has(p.date)) map.set(p.date, new Map());
-      const dayMap = map.get(p.date);
-      const key = `${p.matricule}-${p.patientNom}`;
-      if (!dayMap.has(key)) {
-        dayMap.set(key, { patientNom: p.patientNom, matricule: p.matricule, services: [], total: 0 });
-      }
-      const entry = dayMap.get(key);
-      entry.services.push(p);
-      entry.total += p.prix * p.quantite;
-    });
-    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [prestations, moisSelectionne]);
-
-  const totalPatients = new Set(prestations.map((p) => p.matricule)).size;
-  const totalPrestations = prestations.length;
-  const prixTotal = prestations.reduce((sum, p) => sum + p.prix * p.quantite, 0);
+  const t = resultat?.totaux;
 
   return (
     <div>
-      <h2 className="mb-4">Detail de prestation</h2>
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <h2 className="mb-0">Detail de prestation</h2>
+        {resultat && resultat.services.length > 0 && (
+          <button className="btn btn-outline-primary" onClick={telechargerPDF} disabled={pdfEnCours || loading}>
+            <i className="bi bi-file-earmark-pdf me-2"></i>
+            {pdfEnCours ? 'Generation...' : 'Telecharger le PDF'}
+          </button>
+        )}
+      </div>
 
       <div className="card shadow-sm mb-4">
         <div className="card-body">
           <form className="row g-2 align-items-end" onSubmit={handleSearch}>
-            <div className="col-md-4">
+            <div className="col-md-3">
+              <label className="form-label small">Categorie</label>
+              <select className="form-select text-capitalize" value={categorie} onChange={(e) => setCategorie(e.target.value)} required>
+                <option value="">-- Choisir une categorie --</option>
+                {categories.map((c) => (
+                  <option key={c.nom} value={c.nom}>
+                    {c.nom}
+                    {c.actif === false ? ' (inactive)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-md-3">
               <label className="form-label small">Date de debut</label>
-              <input type="date" className="form-control" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} />
+              <input type="date" className="form-control" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} required />
             </div>
-            <div className="col-md-4">
+            <div className="col-md-3">
               <label className="form-label small">Date de fin</label>
-              <input type="date" className="form-control" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
+              <input type="date" className="form-control" value={dateFin} onChange={(e) => setDateFin(e.target.value)} required />
             </div>
-            <div className="col-md-4">
+            <div className="col-md-3">
               <button type="submit" className="btn btn-primary w-100" disabled={loading}>
                 {loading && <span className="spinner-border spinner-border-sm me-2"></span>}
                 Rechercher
               </button>
             </div>
           </form>
+          {erreur && <div className="alert alert-danger mt-3 mb-0 py-2">{erreur}</div>}
         </div>
       </div>
 
-      {rechercheEffectuee && !loading && (
+      {resultat && !loading && (
         <>
-          <div className="row g-3 mb-4">
-            <div className="col-md-4">
-              <div className="card shadow-sm">
-                <div className="card-body">
-                  <div className="text-muted small">Patients avec prestations</div>
-                  <div className="fs-4 fw-bold">{totalPatients}</div>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-4">
-              <div className="card shadow-sm">
-                <div className="card-body">
-                  <div className="text-muted small">Total Prestations</div>
-                  <div className="fs-4 fw-bold">{totalPrestations}</div>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-4">
-              <div className="card shadow-sm">
-                <div className="card-body">
-                  <div className="text-muted small">Prix Total</div>
-                  <div className="fs-4 fw-bold">{formatMontant(prixTotal)} FCFA</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <h5 className="mb-3">
+            <span className="text-capitalize">{resultat.categorie}</span>
+            <span className="text-muted fw-normal small ms-2">
+              du {dateFr(resultat.periode.debut)} au {dateFr(resultat.periode.fin)}
+            </span>
+          </h5>
 
-          <h5 className="mb-3">Detail par service et par jour</h5>
-          {[...parService.entries()].map(([service, info]) => {
-            const total = [...info.dates.values()].reduce((sum, d) => sum + d.total, 0);
-            return (
-              <div className="card shadow-sm mb-3" key={service}>
-                <div className="card-header bg-primary text-white d-flex justify-content-between">
-                  <span>
-                    {service} <span className="badge bg-light text-dark text-capitalize ms-2">{info.categorie}</span>
-                  </span>
-                  <span className="badge bg-light text-dark">Prix unitaire : {formatMontant(info.prixUnitaire)} FCFA</span>
-                </div>
-                <div className="card-body p-0">
-                  <table className="table mb-0">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Nb patients</th>
-                        <th>Nb prestations</th>
-                        <th>Prix total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...info.dates.entries()].map(([date, d]) => (
-                        <tr key={date}>
-                          <td>{new Date(date).toLocaleDateString('fr-FR')}</td>
-                          <td>
-                            <span className="badge bg-primary">{d.patients.size}</span>
-                          </td>
-                          <td>
-                            <span className="badge bg-success">{d.count}</span>
-                          </td>
-                          <td>{formatMontant(d.total)} FCFA</td>
+          {resultat.services.length === 0 ? (
+            <div className="alert alert-info">Aucune prestation de cette categorie sur cette periode.</div>
+          ) : (
+            <>
+              {resultat.services.map((s) => (
+                <div className="card shadow-sm mb-3" key={s.id}>
+                  <div className="card-header bg-primary text-white">{s.nom}</div>
+                  <div className="card-body p-0">
+                    <table className="table mb-0">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Nb patients</th>
+                          <th>Nb prestations</th>
+                          <th className="text-end">Prix</th>
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td colSpan={3} className="text-end fw-bold">
-                          TOTAL
-                        </td>
-                        <td className="fw-bold">{formatMontant(total)} FCFA</td>
-                      </tr>
-                    </tfoot>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {s.jours.map((j) => (
+                          <tr key={j.date}>
+                            <td>{dateFr(j.date)}</td>
+                            <td>
+                              <span className="badge bg-primary">{j.nbPatients}</span>
+                            </td>
+                            <td>
+                              <span className="badge bg-success">{j.nbPrestations}</span>
+                            </td>
+                            <td className="text-end">{formatMontant(j.montant)} FCFA</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="fw-bold">
+                          <td>TOTAL</td>
+                          <td>{s.nbPatients}</td>
+                          <td>{s.nbPrestations}</td>
+                          <td className="text-end">{formatMontant(s.montant)} FCFA</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-
-          <div className="row g-3 my-4">
-            <div className="col-md-4">
-              <div className="card shadow-sm">
-                <div className="card-body">
-                  <div className="text-muted small">Patients avec prestations</div>
-                  <div className="fs-4 fw-bold">{totalPatients}</div>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-4">
-              <div className="card shadow-sm">
-                <div className="card-body">
-                  <div className="text-muted small">Total Prestations</div>
-                  <div className="fs-4 fw-bold">{totalPrestations}</div>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-4">
-              <div className="card shadow-sm">
-                <div className="card-body">
-                  <div className="text-muted small">Prix Total</div>
-                  <div className="fs-4 fw-bold">{formatMontant(prixTotal)} FCFA</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h5 className="mb-0">Details consultations par patient et par jour</h5>
-            <select className="form-select" style={{ width: 200 }} value={moisSelectionne} onChange={(e) => setMoisSelectionne(e.target.value)}>
-              <option value="">Tous les mois</option>
-              {moisDisponibles.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
               ))}
-            </select>
-          </div>
 
-          {parJourPatient.map(([date, dayMap]) => (
-            <div className="card shadow-sm mb-3" key={date}>
-              <div className="card-header d-flex justify-content-between">
-                <span>{new Date(date).toLocaleDateString('fr-FR')}</span>
-                <span className="badge bg-primary">{dayMap.size} patient(s)</span>
+              <div className="card shadow-sm border-primary">
+                <div className="card-body d-flex justify-content-between flex-wrap gap-2 fw-bold">
+                  <span>
+                    TOTAL <span className="text-capitalize">{resultat.categorie}</span>
+                  </span>
+                  <span>{t.nbPatients} patient(s)</span>
+                  <span>{t.nbPrestations} prestation(s)</span>
+                  <span>{formatMontant(t.montant)} FCFA</span>
+                </div>
               </div>
-              <div className="card-body p-0">
-                <table className="table mb-0">
-                  <thead>
-                    <tr>
-                      <th>Patient</th>
-                      <th>Matricule</th>
-                      <th>Services</th>
-                      <th>Prix total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...dayMap.values()].map((entry, idx) => (
-                      <tr key={idx}>
-                        <td className="text-primary">{entry.patientNom}</td>
-                        <td>
-                          <span className="badge bg-secondary">{entry.matricule}</span>
-                        </td>
-                        <td>
-                          {entry.services.map((s, i) => (
-                            <div key={i} className="mb-1">
-                              <span className="badge bg-warning text-dark text-capitalize me-1">{s.categorie}</span>
-                              <span className="badge bg-info text-dark me-1">Service</span>
-                              {s.service} ({formatMontant(s.prix)} x {s.quantite})
-                            </div>
-                          ))}
-                        </td>
-                        <td className="fw-bold">{formatMontant(entry.total)} FCFA</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
+            </>
+          )}
         </>
       )}
     </div>
