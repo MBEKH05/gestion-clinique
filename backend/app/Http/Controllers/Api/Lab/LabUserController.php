@@ -77,7 +77,7 @@ class LabUserController extends Controller
 
     public function activate(Request $request, string $id)
     {
-        if ($request->user('lab')->id === $id) {
+        if ($request->user('lab')?->id === $id) {
             return response()->json(['detail' => 'Vous ne pouvez pas modifier votre propre statut.'], 409);
         }
 
@@ -90,7 +90,7 @@ class LabUserController extends Controller
 
     public function deactivate(Request $request, string $id)
     {
-        if ($request->user('lab')->id === $id) {
+        if ($request->user('lab')?->id === $id) {
             return response()->json(['detail' => 'Vous ne pouvez pas modifier votre propre statut.'], 409);
         }
 
@@ -103,7 +103,7 @@ class LabUserController extends Controller
 
     public function destroy(Request $request, string $id)
     {
-        if ($request->user('lab')->id === $id) {
+        if ($request->user('lab')?->id === $id) {
             return response()->json(['detail' => 'Vous ne pouvez pas supprimer votre propre compte.'], 409);
         }
 
