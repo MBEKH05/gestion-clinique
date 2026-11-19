@@ -38,6 +38,7 @@ import SecretaireDossiers from './pages/lab/SecretaireDossiers';
 import ListeDossiers from './pages/lab/ListeDossiers';
 import Hospitalisation from './pages/lab/Hospitalisation';
 import AdminLabConsole from './pages/lab/AdminLabConsole';
+import DossierLab from './pages/lab/DossierLab';
 
 import AdminDashboard from './pages/admin/AdminDashboard';
 import UsersList from './pages/admin/UsersList';
@@ -189,6 +190,10 @@ export default function App() {
             />
             <Route path="/lab/hospitalisation" element={labRoute(['technicien'], <Hospitalisation />)} />
             <Route path="/lab/admin" element={labRoute(['administrateur'], <AdminLabConsole />)} />
+            <Route
+              path="/lab/dossier/:id"
+              element={labRoute(['technicien', 'medecin', 'secretaire', 'administrateur'], <DossierLab />)}
+            />
 
             <Route path="/lab/*" element={<Navigate to="/lab/admin" replace />} />
           </Route>

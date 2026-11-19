@@ -3,6 +3,7 @@ import { labDossiersAPI } from '../../api/labEndpoints';
 import { useAuth } from '../../context/AuthContext';
 import { statutBadge, downloadAllDocuments } from '../../utils/labDossierUtils';
 import PdfPreviewModal from '../../components/lab/PdfPreviewModal';
+import QrLabelModal from '../../components/lab/QrLabelModal';
 
 const PAGE_SIZE = 15;
 
@@ -28,6 +29,7 @@ export default function ListeDossiers() {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [previewDocs, setPreviewDocs] = useState(null);
+  const [qrDossiers, setQrDossiers] = useState(null);
 
   useEffect(() => {
     const t = setTimeout(() => { setDebounced(search); setPage(1); }, 400);
@@ -134,6 +136,9 @@ export default function ListeDossiers() {
                       <td>{latest.created_at ? new Date(latest.created_at).toLocaleDateString('fr-FR') : '-'}</td>
                       <td>
                         <div className="d-flex gap-1 flex-wrap">
+                          <button className="btn btn-sm btn-outline-secondary" title="QR code du dossier" onClick={() => setQrDossiers(groupe.dossiers)}>
+                            <i className="bi bi-qr-code"></i>
+                          </button>
                           <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(groupe)}>Apercu</button>
                           <button className="btn btn-sm btn-outline-secondary" onClick={() => handleDownload(groupe)}>
                             <i className="bi bi-download"></i>
@@ -165,6 +170,7 @@ export default function ListeDossiers() {
         </>
       )}
 
+      <QrLabelModal show={!!qrDossiers} onClose={() => setQrDossiers(null)} dossiers={qrDossiers || []} />
       <PdfPreviewModal show={!!previewDocs} onClose={() => setPreviewDocs(null)} documents={previewDocs || []} />
     </div>
   );

@@ -6,6 +6,7 @@ import { statutBadge } from '../../utils/labDossierUtils';
 import Modal from '../../components/lab/Modal';
 import ConfirmModal from '../../components/lab/ConfirmModal';
 import PdfPreviewModal from '../../components/lab/PdfPreviewModal';
+import QrLabelModal from '../../components/lab/QrLabelModal';
 
 const PAGE_SIZE = 20;
 const ACTIFS = 'EN_ATTENTE,VALIDE_MEDECIN,REFUSE';
@@ -46,6 +47,7 @@ export default function TechnicienDossiers() {
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [previewDocs, setPreviewDocs] = useState(null);
+  const [qrDossiers, setQrDossiers] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -211,6 +213,9 @@ export default function TechnicienDossiers() {
                       <td>{latest.created_at ? new Date(latest.created_at).toLocaleDateString('fr-FR') : '-'}</td>
                       <td>
                         <div className="d-flex gap-1 flex-wrap">
+                          <button className="btn btn-sm btn-outline-secondary" title="QR code du dossier" onClick={() => setQrDossiers(groupe.dossiers)}>
+                            <i className="bi bi-qr-code"></i>
+                          </button>
                           <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(groupe)}>
                             Voir PDF
                           </button>
@@ -270,6 +275,7 @@ export default function TechnicienDossiers() {
         error={error}
       />
 
+      <QrLabelModal show={!!qrDossiers} onClose={() => setQrDossiers(null)} dossiers={qrDossiers || []} />
       <PdfPreviewModal show={!!previewDocs} onClose={() => setPreviewDocs(null)} documents={previewDocs || []} />
     </div>
   );

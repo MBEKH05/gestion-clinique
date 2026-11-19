@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import InstallPrompt from '../components/InstallPrompt';
 import { getHomeRoute } from '../utils/authRoutes';
@@ -7,14 +7,23 @@ import { getHomeRoute } from '../utils/authRoutes';
 export default function Login() {
   const { login, isAuthenticated, loading, space, labRole } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Apres connexion : retour au dossier labo ouvert par un QR code si c'est un
+  // compte du laboratoire, sinon page d'accueil de l'espace.
+  const destination = (espace, role) => {
+    const from = location.state?.from;
+    const versDossier = espace === 'laboratoire' && typeof from === 'string' && from.startsWith('/lab/dossier/');
+    return versDossier ? from : getHomeRoute(espace, role);
+  };
+
   if (!loading && isAuthenticated) {
-    return <Navigate to={getHomeRoute(space, labRole)} replace />;
+    return <Navigate to={destination(space, labRole)} replace />;
   }
 
   const handleSubmit = async (e) => {
@@ -23,7 +32,7 @@ export default function Login() {
     setSubmitting(true);
     try {
       const result = await login(username, password);
-      navigate(getHomeRoute(result.space, result.user?.role));
+      navigate(destination(result.space, result.user?.role), { replace: true });
     } catch (err) {
       const detail = err.response?.data?.detail;
       setError(detail || "Nom d'utilisateur ou mot de passe incorrect.");

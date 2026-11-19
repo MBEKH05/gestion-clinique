@@ -1,9 +1,10 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getHomeRoute } from '../utils/authRoutes';
 
 export default function ProtectedRoute({ children, adminOnly = false, requireSpace = null, allowedRoles = null }) {
   const { isAuthenticated, isSuperAdmin, space, labRole, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -16,7 +17,8 @@ export default function ProtectedRoute({ children, adminOnly = false, requireSpa
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    // On garde la page demandee (ex. dossier ouvert par un QR code) pour y revenir apres la connexion.
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
   if (requireSpace && space !== requireSpace) {

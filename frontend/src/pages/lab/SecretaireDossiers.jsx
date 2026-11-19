@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { buildWhatsAppLink, printPdf } from '../../utils/labDossierUtils';
 import ConfirmModal from '../../components/lab/ConfirmModal';
 import PdfPreviewModal from '../../components/lab/PdfPreviewModal';
+import QrLabelModal from '../../components/lab/QrLabelModal';
 
 const PAGE_SIZE = 20;
 
@@ -28,6 +29,7 @@ export default function SecretaireDossiers() {
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [previewDocs, setPreviewDocs] = useState(null);
+  const [qrDossiers, setQrDossiers] = useState(null);
   const [archiving, setArchiving] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -149,6 +151,9 @@ export default function SecretaireDossiers() {
                       <td>{latest.valide_le ? new Date(latest.valide_le).toLocaleDateString('fr-FR') : '-'}</td>
                       <td>
                         <div className="d-flex gap-1 flex-wrap">
+                          <button className="btn btn-sm btn-outline-secondary" title="QR code du dossier" onClick={() => setQrDossiers(groupe.dossiers)}>
+                            <i className="bi bi-qr-code"></i>
+                          </button>
                           <button className="btn btn-sm btn-outline-secondary" onClick={() => openPreview(groupe)}>
                             Apercu
                           </button>
@@ -188,6 +193,7 @@ export default function SecretaireDossiers() {
         </>
       )}
 
+      <QrLabelModal show={!!qrDossiers} onClose={() => setQrDossiers(null)} dossiers={qrDossiers || []} />
       <PdfPreviewModal show={!!previewDocs} onClose={() => setPreviewDocs(null)} documents={previewDocs || []} />
 
       <ConfirmModal
