@@ -31,6 +31,9 @@ import DevisMensuel from './pages/DevisMensuel';
 import Statistiques from './pages/Statistiques';
 import DetailPrestation from './pages/DetailPrestation';
 import RapportActivite from './pages/RapportActivite';
+import RendezVousAgenda from './pages/rendezvous/RendezVousAgenda';
+import RendezVousForm from './pages/rendezvous/RendezVousForm';
+import SpecialitesRdv from './pages/rendezvous/SpecialitesRdv';
 
 import TechnicienDossiers from './pages/lab/TechnicienDossiers';
 import MedecinDossiers from './pages/lab/MedecinDossiers';
@@ -176,6 +179,17 @@ export default function App() {
             />
 
             <Route path="/rapport-activite" element={<RapportActivite />} />
+
+            <Route path="/rendez-vous" element={<RendezVousAgenda />} />
+            <Route path="/rendez-vous/nouveau" element={<RendezVousForm />} />
+            <Route
+              path="/rendez-vous/specialites"
+              element={
+                <ProtectedRoute adminOnly>
+                  <SpecialitesRdv />
+                </ProtectedRoute>
+              }
+            />
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>

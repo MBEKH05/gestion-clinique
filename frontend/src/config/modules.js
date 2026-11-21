@@ -32,6 +32,14 @@ const FACTURATION_MODULE = {
         { to: '/statistiques', label: 'Statistiques', icon: 'bi-bar-chart', adminOnly: true },
       ],
     },
+    {
+      title: 'Rendez-vous',
+      items: [
+        { to: '/rendez-vous', label: 'Agenda', icon: 'bi-calendar3', end: true },
+        { to: '/rendez-vous/nouveau', label: 'Nouveau rendez-vous', icon: 'bi-calendar-plus' },
+        { to: '/rendez-vous/specialites', label: 'Specialites', icon: 'bi-hospital', adminOnly: true },
+      ],
+    },
   ],
 };
 

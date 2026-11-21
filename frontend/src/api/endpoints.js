@@ -93,6 +93,22 @@ export const rapportActiviteAPI = {
   getResume: (params) => api.get('/rapport-activite/resume', { params: { ...params, _t: Date.now() } }),
 };
 
+export const specialitesAPI = {
+  getAll: () => api.get('/specialites'),
+  create: (data) => api.post('/specialites', data),
+  update: (id, data) => api.put(`/specialites/${id}`, data),
+  remove: (id) => api.delete(`/specialites/${id}`),
+};
+
+export const rendezVousAPI = {
+  getAll: (params) => api.get('/rendez-vous', { params }),
+  getCreneaux: (params) => api.get('/rendez-vous/creneaux', { params }),
+  create: (data) => api.post('/rendez-vous', data),
+  update: (id, data) => api.put(`/rendez-vous/${id}`, data),
+  updateStatut: (id, statut) => api.patch(`/rendez-vous/${id}/statut`, { statut }),
+  marquerWhatsapp: (id) => api.post(`/rendez-vous/${id}/whatsapp`),
+};
+
 export const statistiquesAPI = {
   getPaiement: (params) => api.get('/statistiques/paiement', { params }),
   getFacturesMensuelles: (params) => api.get('/statistiques/factures-mensuelles', { params }),

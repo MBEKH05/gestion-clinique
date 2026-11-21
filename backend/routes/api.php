@@ -20,6 +20,8 @@ use App\Http\Controllers\Api\Lab\LabStatsController;
 use App\Http\Controllers\Api\Lab\LabUserController;
 use App\Http\Controllers\Api\PatientController;
 use App\Http\Controllers\Api\RapportSecretaireController;
+use App\Http\Controllers\Api\RendezVousController;
+use App\Http\Controllers\Api\SpecialiteController;
 use App\Http\Controllers\Api\StatistiqueController;
 use App\Http\Controllers\Api\TarifController;
 use Illuminate\Support\Facades\Route;
@@ -78,6 +80,21 @@ Route::middleware('auth:api')->group(function () {
         });
 
     Route::get('factures-mensuelles/numero', [FactureMensuelleController::class, 'numero']);
+
+    // Module Rendez-vous : tous les comptes Facturation prennent et gerent les
+    // rendez-vous ; seule la liste des specialites est reservee au Super Admin.
+    Route::get('specialites', [SpecialiteController::class, 'index']);
+    Route::middleware('admin')->group(function () {
+        Route::post('specialites', [SpecialiteController::class, 'store']);
+        Route::put('specialites/{id}', [SpecialiteController::class, 'update']);
+        Route::delete('specialites/{id}', [SpecialiteController::class, 'destroy']);
+    });
+    Route::get('rendez-vous/creneaux', [RendezVousController::class, 'creneaux']);
+    Route::get('rendez-vous', [RendezVousController::class, 'index']);
+    Route::post('rendez-vous', [RendezVousController::class, 'store']);
+    Route::put('rendez-vous/{id}', [RendezVousController::class, 'update']);
+    Route::patch('rendez-vous/{id}/statut', [RendezVousController::class, 'updateStatut']);
+    Route::post('rendez-vous/{id}/whatsapp', [RendezVousController::class, 'whatsapp']);
 
     Route::get('categories', [CategorieController::class, 'index']);
     Route::middleware('admin')->group(function () {
