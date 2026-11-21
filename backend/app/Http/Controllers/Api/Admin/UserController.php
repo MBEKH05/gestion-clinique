@@ -7,7 +7,9 @@ use App\Http\Resources\Admin\UserResource;
 use App\Models\User;
 use App\Support\Sanitizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -86,5 +88,39 @@ class UserController extends Controller
         $user->save();
 
         return UserResource::make($user);
+    }
+
+    /**
+     * Supprime un compte Facturation. Les patients, devis et rendez-vous qu'il a
+     * crees sont conserves (ils ne sont simplement plus attribues a ce compte) :
+     * dans ce cas une confirmation explicite (confirmer=1) est demandee.
+     */
+    public function destroy(Request $request, string $id)
+    {
+        $user = User::findOrFail($id);
+
+        if ($user->is_superuser && ! User::where('is_superuser', true)->where('is_active', true)->whereKeyNot($user->id)->exists()) {
+            return response()->json(['detail' => 'Impossible de supprimer le dernier compte Super Admin actif.'], 409);
+        }
+
+        $activite = [
+            'patients' => DB::table('patients')->where('created_by', $user->id)->count(),
+            'devis' => DB::table('devis')->where('created_by', $user->id)->count(),
+            'rendezVous' => DB::table('rendez_vous')->where('created_by', $user->id)->count(),
+        ];
+
+        if (array_sum($activite) > 0 && ! $request->boolean('confirmer')) {
+            return response()->json([
+                'detail' => "Ce compte a enregistre {$activite['patients']} patient(s), {$activite['devis']} devis et {$activite['rendezVous']} rendez-vous. "
+                    ."Ils seront conserves mais n'apparaitront plus dans son rapport d'activite.",
+                'confirmation_requise' => true,
+                'activite' => $activite,
+            ], 409);
+        }
+
+        Log::channel('security')->warning("Compte facturation supprime : {$user->username} (id {$user->id}) par l'administrateur de la plateforme", $activite);
+        $user->delete();
+
+        return response()->json(null, 204);
     }
 }

@@ -109,9 +109,15 @@ class LabUserController extends Controller
 
         $user = LabUser::findOrFail($id);
 
-        if (LabDossier::where('technicien_id', $id)->exists()) {
+        // Tracabilite medicale : un compte qui apparait dans un dossier (technicien,
+        // medecin qui a valide, archivage) n'est jamais supprime.
+        $utilise = LabDossier::where('technicien_id', $id)
+            ->orWhere('medecin_id', $id)
+            ->orWhere('archive_par_id', $id)
+            ->exists();
+        if ($utilise) {
             return response()->json([
-                'detail' => 'Ce compte est technicien referent sur des dossiers existants et ne peut pas etre supprime. Desactivez-le a la place.',
+                'detail' => 'Ce compte apparait dans des dossiers du laboratoire et ne peut pas etre supprime (tracabilite). Desactivez-le a la place.',
             ], 409);
         }
 

@@ -16,6 +16,7 @@ export const platformUsersAPI = {
   update: (id, data) => adminApi.put(`/users/${id}`, data),
   activate: (id) => adminApi.post(`/users/${id}/activate`),
   deactivate: (id) => adminApi.post(`/users/${id}/deactivate`),
+  remove: (id, confirmer = false) => adminApi.delete(`/users/${id}`, { params: confirmer ? { confirmer: 1 } : {} }),
 };
 
 export const platformLabUsersAPI = {
@@ -24,6 +25,7 @@ export const platformLabUsersAPI = {
   update: (id, data) => adminApi.put(`/lab-users/${id}`, data),
   activate: (id) => adminApi.post(`/lab-users/${id}/activate`),
   deactivate: (id) => adminApi.post(`/lab-users/${id}/deactivate`),
+  remove: (id) => adminApi.delete(`/lab-users/${id}`),
 };
 
 export const platformLabDossiersAPI = {

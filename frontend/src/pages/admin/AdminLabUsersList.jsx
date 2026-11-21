@@ -12,6 +12,7 @@ const ROLE_LABELS = {
 export default function AdminLabUsersList() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -29,6 +30,18 @@ export default function AdminLabUsersList() {
     load();
   };
 
+  const supprimer = async (user) => {
+    if (!window.confirm(`Supprimer definitivement le compte ${user.username} (${user.name}) ?`)) return;
+    setMessage(null);
+    try {
+      await platformLabUsersAPI.remove(user.id);
+      setMessage({ type: 'success', text: `Compte ${user.username} supprime.` });
+      load();
+    } catch (err) {
+      setMessage({ type: 'danger', text: err.response?.data?.detail || 'Suppression impossible.' });
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>;
   }
@@ -43,6 +56,8 @@ export default function AdminLabUsersList() {
           <i className="bi bi-plus-lg me-2"></i>Ajouter un compte
         </Link>
       </div>
+
+      {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
 
       <div className="table-responsive">
         <table className="table table-hover bg-white shadow-sm">
@@ -77,6 +92,9 @@ export default function AdminLabUsersList() {
                     onClick={() => toggleActive(u)}
                   >
                     {u.is_active ? 'Desactiver' : 'Activer'}
+                  </button>
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => supprimer(u)} title="Supprimer le compte">
+                    <i className="bi bi-trash"></i>
                   </button>
                 </td>
               </tr>

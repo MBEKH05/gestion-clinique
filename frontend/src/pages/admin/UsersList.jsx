@@ -5,6 +5,7 @@ import { platformUsersAPI } from '../../api/adminEndpoints';
 export default function UsersList() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -22,6 +23,34 @@ export default function UsersList() {
     load();
   };
 
+  // Suppression : une seconde confirmation est demandee si le compte a enregistre
+  // des patients / devis / rendez-vous (ils sont conserves, sans attribution).
+  const supprimer = async (user) => {
+    if (!window.confirm(`Supprimer definitivement le compte ${user.username} (${user.name}) ?`)) return;
+    setMessage(null);
+    try {
+      await platformUsersAPI.remove(user.id);
+    } catch (err) {
+      const d = err.response?.data;
+      if (err.response?.status === 409 && d?.confirmation_requise) {
+        if (!window.confirm(`${d.detail}
+
+Confirmer la suppression du compte ${user.username} ?`)) return;
+        try {
+          await platformUsersAPI.remove(user.id, true);
+        } catch (err2) {
+          setMessage({ type: 'danger', text: err2.response?.data?.detail || 'Suppression impossible.' });
+          return;
+        }
+      } else {
+        setMessage({ type: 'danger', text: d?.detail || 'Suppression impossible.' });
+        return;
+      }
+    }
+    setMessage({ type: 'success', text: `Compte ${user.username} supprime.` });
+    load();
+  };
+
   if (loading) {
     return <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>;
   }
@@ -36,6 +65,8 @@ export default function UsersList() {
           <i className="bi bi-plus-lg me-2"></i>Ajouter un compte
         </Link>
       </div>
+
+      {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
 
       <div className="table-responsive">
         <table className="table table-hover bg-white shadow-sm">
@@ -70,6 +101,9 @@ export default function UsersList() {
                     onClick={() => toggleActive(u)}
                   >
                     {u.is_active ? 'Desactiver' : 'Activer'}
+                  </button>
+                  <button className="btn btn-sm btn-outline-danger" onClick={() => supprimer(u)} title="Supprimer le compte">
+                    <i className="bi bi-trash"></i>
                   </button>
                 </td>
               </tr>
