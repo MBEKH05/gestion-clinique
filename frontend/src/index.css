@@ -310,6 +310,156 @@ th,
   font-style: italic;
 }
 
+/* ---------- Menu repliable ---------- */
+.sidebar {
+  width: 272px;
+  flex-shrink: 0;
+  transition: width 0.2s ease;
+}
+
+.sidebar .nav-icon {
+  margin-right: 0.5rem;
+  width: 1.1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sidebar-collapse-toggle {
+  margin-left: auto;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.sidebar-collapse-toggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.sidebar-section {
+  margin-top: 0.5rem;
+}
+
+.sidebar-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.sidebar-section-toggle:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-section-toggle:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.sidebar-section-toggle i {
+  font-size: 0.65rem;
+}
+
+@media (min-width: 992px) {
+  .sidebar.collapsed {
+    width: 72px;
+  }
+
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .module-header,
+  .sidebar.collapsed .sidebar-section-toggle span,
+  .sidebar.collapsed .sidebar-section-toggle i {
+    display: none !important;
+  }
+
+  .sidebar.collapsed .sidebar-brand {
+    flex-direction: column;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  .sidebar.collapsed .sidebar-collapse-toggle {
+    margin-left: 0;
+  }
+
+  /* Les titres de section deviennent un simple trait de separation. */
+  .sidebar.collapsed .sidebar-section-toggle {
+    padding: 0;
+    height: 1px;
+    margin: 0.5rem 0.4rem;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  /* Titres de section des espaces Labo / Administration : trait de separation. */
+  .sidebar.collapsed .sidebar-section-title {
+    font-size: 0 !important;
+    height: 1px;
+    padding: 0 !important;
+    margin: 0.5rem 0.4rem !important;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+  }
+
+  .sidebar.collapsed .nav-link {
+    justify-content: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .sidebar.collapsed .nav-link .nav-icon {
+    margin-right: 0;
+    font-size: 1.1rem;
+  }
+
+  .sidebar.collapsed .module-block {
+    border: none;
+    background: transparent;
+  }
+
+  .sidebar.collapsed .module-body {
+    padding: 0;
+    border-top: none;
+  }
+
+  .sidebar.collapsed .sidebar-footer {
+    padding: 0.75rem 0.5rem !important;
+  }
+
+  .sidebar.collapsed .sidebar-user {
+    justify-content: center;
+  }
+
+  .sidebar.collapsed .sidebar-footer .btn .nav-icon {
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .sidebar-collapse-toggle {
+    display: none;
+  }
+}
+
 .sidebar-avatar {
   width: 38px;
   height: 38px;

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getModules } from '../config/modules';
+import { SidebarFooter, SidebarToggle } from './Layout';
+import { useSidebarState } from './useSidebarState';
 
 const LAB_ROLE_LABELS = {
   technicien: 'Technicien',
@@ -24,6 +26,7 @@ export default function SpaceLayout({ space }) {
   const [openModules, setOpenModules] = useState(() => new Set(modules.map((m) => m.key)));
   const [mobileOpen, setMobileOpen] = useState(false);
   const closeMobile = () => setMobileOpen(false);
+  const { collapsed, toggleCollapsed } = useSidebarState(space);
 
   const toggleModule = (key) => {
     setOpenModules((prev) => {
@@ -51,9 +54,10 @@ export default function SpaceLayout({ space }) {
       end={item.end}
       className="nav-link text-white d-flex align-items-center"
       onClick={closeMobile}
+      title={collapsed ? item.label : undefined}
     >
-      <i className={`bi ${item.icon} me-2`}></i>
-      {item.label}
+      <i className={`bi ${item.icon} nav-icon`}></i>
+      <span className="nav-label">{item.label}</span>
     </NavLink>
   );
 
@@ -79,7 +83,7 @@ export default function SpaceLayout({ space }) {
 
       {mobileOpen && <div className="sidebar-backdrop show" onClick={closeMobile}></div>}
 
-      <aside className={`sidebar text-white d-flex flex-column ${mobileOpen ? 'mobile-open' : ''}`} style={{ width: 272, flexShrink: 0 }}>
+      <aside className={`sidebar text-white d-flex flex-column ${mobileOpen ? 'mobile-open' : ''} ${collapsed ? 'collapsed' : ''}`}>
         <div className="p-3 d-flex align-items-center gap-2 sidebar-brand position-relative" style={{ zIndex: 1 }}>
           <div className="brand-badge">
             <img
@@ -92,19 +96,20 @@ export default function SpaceLayout({ space }) {
             />
             <i className="bi bi-hospital fs-5" style={{ display: 'none' }}></i>
           </div>
-          <div>
+          <div className="nav-label">
             <div>Clinique</div>
             <div style={{ fontSize: '0.65rem', fontWeight: 500, color: 'rgba(255,255,255,0.45)' }}>
               {SPACE_LABELS[space]}
             </div>
           </div>
+          <SidebarToggle collapsed={collapsed} onToggle={toggleCollapsed} />
         </div>
 
         <nav className="flex-grow-1 overflow-auto p-2 position-relative" style={{ zIndex: 1 }}>
-          <div className="sidebar-section-title mt-1 mb-1 px-2">Modules</div>
+          <div className="sidebar-section-title mt-1 mb-1 px-2 nav-label">Modules</div>
 
           {modules.map((module) => {
-            const isOpen = openModules.has(module.key);
+            const isOpen = collapsed || openModules.has(module.key);
             return (
               <div key={module.key} className="module-block">
                 <button
@@ -137,21 +142,16 @@ export default function SpaceLayout({ space }) {
           })}
         </nav>
 
-        <div className="p-3 sidebar-footer position-relative" style={{ zIndex: 1 }}>
-          <div className="d-flex align-items-center gap-2 mb-3">
-            <div className="sidebar-avatar">{initial}</div>
-            <div className="overflow-hidden">
-              <div className="fw-semibold small text-truncate">{user?.name || user?.username}</div>
-              <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)' }}>{roleLabel}</div>
-            </div>
-          </div>
-          <button className="btn btn-outline-light btn-sm w-100" onClick={handleLogout}>
-            <i className="bi bi-box-arrow-right me-2"></i>Deconnexion
-          </button>
-        </div>
+        <SidebarFooter
+          collapsed={collapsed}
+          initial={initial}
+          nom={user?.name || user?.username}
+          role={roleLabel}
+          onLogout={handleLogout}
+        />
       </aside>
 
-      <main className="main-content flex-grow-1 p-3 p-md-4" style={{ overflowY: 'auto' }}>
+      <main className="main-content flex-grow-1 p-3 p-md-4" style={{ overflowY: 'auto', minWidth: 0 }}>
         <Outlet />
       </main>
     </div>
