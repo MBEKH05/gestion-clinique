@@ -80,10 +80,6 @@ Route::middleware('auth:api')->group(function () {
         });
 
     Route::get('factures-mensuelles/numero', [FactureMensuelleController::class, 'numero']);
-    // Verrou des factures mensuelles apres le 5 du mois (code a 4 chiffres).
-    Route::get('factures-mensuelles/acces', [FactureMensuelleController::class, 'acces']);
-    Route::post('factures-mensuelles/deverrouiller', [FactureMensuelleController::class, 'deverrouiller']);
-    Route::post('factures-mensuelles/verrouiller', [FactureMensuelleController::class, 'verrouiller']);
 
     // Module Rendez-vous : tous les comptes Facturation prennent et gerent les
     // rendez-vous ; seule la liste des specialites est reservee au Super Admin.

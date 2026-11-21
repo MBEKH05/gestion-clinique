@@ -100,12 +100,6 @@ export const specialitesAPI = {
   remove: (id) => api.delete(`/specialites/${id}`),
 };
 
-export const verrouFacturesAPI = {
-  getAcces: () => api.get('/factures-mensuelles/acces', { params: { _t: Date.now() } }),
-  deverrouiller: (code) => api.post('/factures-mensuelles/deverrouiller', { code }),
-  verrouiller: () => api.post('/factures-mensuelles/verrouiller'),
-};
-
 export const rendezVousAPI = {
   getAll: (params) => api.get('/rendez-vous', { params }),
   getCreneaux: (params) => api.get('/rendez-vous/creneaux', { params }),

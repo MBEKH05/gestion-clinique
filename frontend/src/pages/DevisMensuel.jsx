@@ -4,7 +4,6 @@ import { facturesMensuellesAPI, devisAPI } from '../api/endpoints';
 import { convertDevisFromAPI } from '../utils/apiConverters';
 import { formatMontant } from '../utils/devisUtils';
 import { generatePDFDevisMensuel } from '../utils/pdfUtils';
-import VerrouFactures from '../components/VerrouFactures';
 
 function moisCourant() {
   const now = new Date();
@@ -20,7 +19,7 @@ function formatPeriodeMois(mois) {
   return `${fmt(debut)} au ${fmt(fin)}`;
 }
 
-function DevisMensuelContenu({ onVerrouille }) {
+export default function DevisMensuel() {
   const { ipms, assurances } = useData();
   const [mois, setMois] = useState(moisCourant);
   const [typePriseEnCharge, setTypePriseEnCharge] = useState('IPM');
@@ -65,10 +64,6 @@ function DevisMensuelContenu({ onVerrouille }) {
 
       setResults(rows);
       setNumeroFacture(numeroRes.data.numero);
-    } catch (err) {
-      // Acces expire ou verrouille entre-temps : retour a l'ecran du code.
-      if (err.response?.status === 423) onVerrouille();
-      else throw err;
     } finally {
       setLoading(false);
     }
@@ -235,9 +230,4 @@ function DevisMensuelContenu({ onVerrouille }) {
       )}
     </div>
   );
-}
-
-// Page protegee par le verrou des factures mensuelles (code apres le 5 du mois).
-export default function DevisMensuel() {
-  return <VerrouFactures>{(reverrouiller) => <DevisMensuelContenu onVerrouille={reverrouiller} />}</VerrouFactures>;
 }

@@ -19,11 +19,6 @@ class DevisController extends Controller
 
     public function index(Request $request)
     {
-        // Recherche par mois = factures mensuelles : soumise au verrou apres le 5 du mois.
-        if ($request->filled('mois') && ($refus = FactureMensuelleController::refusSiVerrouille($request))) {
-            return $refus;
-        }
-
         $query = Devis::with('patient')->where('is_proforma', false);
 
         if ($request->boolean('with_lignes')) {
