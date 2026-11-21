@@ -102,6 +102,7 @@ export const specialitesAPI = {
 
 export const rendezVousAPI = {
   getAll: (params) => api.get('/rendez-vous', { params }),
+  get: (id) => api.get(`/rendez-vous/${id}`),
   getCreneaux: (params) => api.get('/rendez-vous/creneaux', { params }),
   create: (data) => api.post('/rendez-vous', data),
   update: (id, data) => api.put(`/rendez-vous/${id}`, data),

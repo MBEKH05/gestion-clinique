@@ -47,6 +47,11 @@ class RendezVousController extends Controller
         ]);
     }
 
+    public function show(string $id)
+    {
+        return response()->json($this->format(RendezVous::with(['specialite', 'createur:id,username,name'])->findOrFail($id)));
+    }
+
     /** Creneaux d'une specialite pour une date, avec le nombre de places prises. */
     public function creneaux(Request $request)
     {
@@ -115,6 +120,7 @@ class RendezVousController extends Controller
             'date' => 'sometimes|date',
             'heure' => 'sometimes|date_format:H:i',
             'patient_nom' => 'sometimes|string|max:200',
+            'patient_id' => 'sometimes|nullable|string|exists:patients,id',
             'telephone' => 'sometimes|nullable|string|max:30',
             'motif' => 'sometimes|nullable|string|max:255',
         ]);
@@ -148,6 +154,10 @@ class RendezVousController extends Controller
                     return response()->json(['detail' => 'Le nom du patient est requis.'], 422);
                 }
                 $rdv->patient_nom = $nom;
+            }
+            // Rattache le rendez-vous a la fiche patient (ex. apres le devis du patient).
+            if (array_key_exists('patient_id', $data)) {
+                $rdv->patient_id = $data['patient_id'];
             }
             if (array_key_exists('telephone', $data)) {
                 $rdv->telephone = $this->nettoyerTelephone($data['telephone']);

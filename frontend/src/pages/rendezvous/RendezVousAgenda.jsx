@@ -208,6 +208,11 @@ export default function RendezVousAgenda() {
                         <button className="btn btn-sm btn-outline-primary" title="Deplacer" onClick={() => setDeplacement(r)}>
                           <i className="bi bi-calendar2-week"></i>
                         </button>
+                        {!annule && (
+                          <Link to={`/devis/creer?rdv=${r.id}`} className="btn btn-sm btn-primary" title="Faire le devis de ce patient">
+                            <i className="bi bi-file-earmark-plus me-1"></i>Devis
+                          </Link>
+                        )}
                       </div>
                     </td>
                   </tr>

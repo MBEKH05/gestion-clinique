@@ -91,6 +91,7 @@ Route::middleware('auth:api')->group(function () {
     });
     Route::get('rendez-vous/creneaux', [RendezVousController::class, 'creneaux']);
     Route::get('rendez-vous', [RendezVousController::class, 'index']);
+    Route::get('rendez-vous/{id}', [RendezVousController::class, 'show']);
     Route::post('rendez-vous', [RendezVousController::class, 'store']);
     Route::put('rendez-vous/{id}', [RendezVousController::class, 'update']);
     Route::patch('rendez-vous/{id}/statut', [RendezVousController::class, 'updateStatut']);

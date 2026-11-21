@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { devisAPI, patientsAPI } from '../api/endpoints';
+import { devisAPI, patientsAPI, rendezVousAPI } from '../api/endpoints';
+import ChoixPatientDevis from '../components/ChoixPatientDevis';
 import { convertDevisFromAPI, convertPatientFromAPI } from '../utils/apiConverters';
 import { formatMontant } from '../utils/devisUtils';
 
 export default function DevisForm({ isProforma: isProformaProp = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rdvParam = searchParams.get('rdv');
   const { analyses, ipms, assurances, categories, getPrixAnalyse, reloadTarifs, addDevis, updateDevis, addPatient, updatePatient } =
     useData();
 
@@ -34,6 +37,73 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [existingPatientId, setExistingPatientId] = useState(null);
+  // Rendez-vous a l'origine du devis (rattache au patient et passe en "Venu" apres l'enregistrement).
+  const [rdvLie, setRdvLie] = useState(null);
+  // Patients existants qui ressemblent a la saisie d'un nouveau patient (anti-doublon).
+  const [similaires, setSimilaires] = useState([]);
+
+  const appliquerPatient = (p, rdv = null) => {
+    setExistingPatientId(p.id);
+    setNomComplet(p.nomComplet || '');
+    setMatricule(p.matricule || '');
+    setTypePriseEnCharge(p.typePriseEnCharge || 'IPM');
+    setIpmId(p.ipmId || '');
+    setAssuranceId(p.assuranceId || '');
+    setRdvLie(rdv);
+    setSimilaires([]);
+  };
+
+  const nouveauPatient = (nom = '', rdv = null) => {
+    setExistingPatientId(null);
+    setNomComplet(nom || '');
+    setMatricule('');
+    // Ne pas garder la prise en charge du patient choisi precedemment.
+    setTypePriseEnCharge('IPM');
+    setIpmId('');
+    setAssuranceId('');
+    setRdvLie(rdv);
+  };
+
+  // Devis ouvert depuis l'agenda : /devis/creer?rdv=<id>
+  useEffect(() => {
+    if (isEdit || !rdvParam) return;
+    rendezVousAPI
+      .get(rdvParam)
+      .then(async ({ data: rdv }) => {
+        if (rdv.patientId) {
+          try {
+            const { data } = await patientsAPI.get(rdv.patientId);
+            appliquerPatient(convertPatientFromAPI(data), rdv);
+            return;
+          } catch {
+            // fiche introuvable : on repart du nom du rendez-vous
+          }
+        }
+        nouveauPatient(rdv.patientNom, rdv);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rdvParam, isEdit]);
+
+  // Anti-doublon : un nouveau patient qui ressemble a un patient existant.
+  useEffect(() => {
+    if (isEdit || existingPatientId) {
+      setSimilaires([]);
+      return undefined;
+    }
+    const terme = (matricule.trim().length >= 2 ? matricule : nomComplet).trim();
+    if (terme.length < 3 && !(matricule.trim().length >= 2)) {
+      setSimilaires([]);
+      return undefined;
+    }
+    const t = setTimeout(() => {
+      patientsAPI
+        .search(terme, 1, 5)
+        .then(({ data }) => setSimilaires((data.results || []).map(convertPatientFromAPI)))
+        .catch(() => setSimilaires([]));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [nomComplet, matricule, existingPatientId, isEdit]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -184,6 +254,16 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
         result = await addDevis(devisPayload);
       }
 
+      if (rdvLie) {
+        // Le rendez-vous est rattache a la fiche patient et passe en "Venu".
+        try {
+          if (rdvLie.patientId !== patientId) await rendezVousAPI.update(rdvLie.id, { patient_id: patientId });
+          if (!['VENU', 'ANNULE'].includes(rdvLie.statut)) await rendezVousAPI.updateStatut(rdvLie.id, 'VENU');
+        } catch {
+          // le devis est enregistre ; le rendez-vous pourra etre mis a jour depuis l'agenda
+        }
+      }
+
       navigate(isProforma ? '/devis/proforma' : `/devis/${result.id}`);
     } catch (err) {
       setError(err.response?.data?.detail || "Erreur lors de l'enregistrement du devis.");
@@ -208,6 +288,37 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
         <div className="card shadow-sm mb-4">
           <div className="card-body">
             <h5 className="card-title">Informations du patient</h5>
+            {!isEdit && (
+              <ChoixPatientDevis
+                ongletInitial="rdv"
+                onPatient={appliquerPatient}
+                onNouveau={nouveauPatient}
+              />
+            )}
+            {!isEdit && (existingPatientId || rdvLie) && (
+              <div className="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
+                <span>
+                  {existingPatientId ? (
+                    <>
+                      <i className="bi bi-person-check me-2"></i>Patient enregistre : <strong>{nomComplet}</strong>
+                      {matricule && <span className="ms-1">({matricule})</span>}
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-person-plus me-2"></i>Nouveau patient
+                    </>
+                  )}
+                  {rdvLie && (
+                    <span className="ms-2 small">
+                      - rendez-vous de {rdvLie.heure} ({rdvLie.specialite})
+                    </span>
+                  )}
+                </span>
+                <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => { nouveauPatient('', null); }}>
+                  Changer de patient
+                </button>
+              </div>
+            )}
             <div className="row g-3">
               <div className="col-md-6">
                 <label className="form-label">Nom complet</label>
@@ -229,6 +340,23 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
                   required
                 />
               </div>
+              {similaires.length > 0 && (
+                <div className="col-12">
+                  <div className="alert alert-warning py-2 mb-0">
+                    <div className="small fw-semibold mb-1">
+                      <i className="bi bi-exclamation-triangle me-1"></i>Ce patient existe peut-etre deja. Choisissez-le pour eviter un doublon :
+                    </div>
+                    <div className="d-flex flex-wrap gap-2">
+                      {similaires.map((p) => (
+                        <button type="button" key={p.id} className="btn btn-sm btn-outline-dark" onClick={() => appliquerPatient(p, rdvLie)}>
+                          {p.nomComplet}
+                          {p.matricule && <span className="text-muted ms-1">({p.matricule})</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="col-md-4">
                 <label className="form-label">Type de prise en charge</label>
                 <select
