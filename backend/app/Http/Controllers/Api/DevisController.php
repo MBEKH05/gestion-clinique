@@ -101,12 +101,12 @@ class DevisController extends Controller
         $entiteId = $request->query('entite_id');
         $column = $type === 'IPM' ? 'ipm_id' : 'assurance_id';
 
-        $query->whereHas('patient', function ($p) use ($type, $column, $entiteId) {
-            $p->where('type_prise_en_charge', $type);
-            if ($entiteId) {
-                $p->where($column, $entiteId);
-            }
-        });
+        // Prise en charge enregistree sur le devis (et non la fiche actuelle du
+        // patient, qui peut avoir change depuis).
+        $query->where('devis.type_prise_en_charge', $type);
+        if ($entiteId) {
+            $query->where("devis.{$column}", $entiteId);
+        }
     }
 
     protected function applyOrdering($query, Request $request): void
@@ -147,7 +147,7 @@ class DevisController extends Controller
                 'is_proforma' => $data['is_proforma'],
                 'total' => 0,
                 'created_by' => $userId,
-            ]);
+            ] + $this->priseEnCharge($data));
 
             $total = $this->creerLignes($devis, $data['lignes']);
 
@@ -186,6 +186,12 @@ class DevisController extends Controller
             }
             if (array_key_exists('is_proforma', $data)) {
                 $devis->is_proforma = $data['is_proforma'];
+            }
+
+            // Le formulaire de devis renvoie la prise en charge choisie : elle
+            // remplace celle du devis (correction volontaire par la secretaire).
+            if (array_key_exists('type_prise_en_charge', $data) || array_key_exists('patient', $data)) {
+                $devis->fill($this->priseEnCharge($data + ['patient' => $devis->patient_id]));
             }
 
             if (array_key_exists('lignes', $data)) {
@@ -245,6 +251,9 @@ class DevisController extends Controller
             'souscripteur' => 'nullable|string|max:255',
             'taux_couverture' => 'nullable|string|max:10',
             'is_proforma' => 'sometimes|boolean',
+            'type_prise_en_charge' => 'sometimes|nullable|in:IPM,ASSURANCE,CAISSE',
+            'ipm' => 'sometimes|nullable|string|exists:ipms,id',
+            'assurance' => 'sometimes|nullable|string|exists:assurances,id',
             'lignes' => ($partial ? 'sometimes' : 'required').'|array',
             'lignes.*.analyseId' => 'required_with:lignes|string|exists:analyses,id',
             'lignes.*.prix' => 'required_with:lignes|numeric|min:0',
@@ -252,6 +261,30 @@ class DevisController extends Controller
         ];
 
         return $request->validate($rules);
+    }
+
+    /**
+     * Prise en charge a enregistrer sur le devis : celle envoyee par le
+     * formulaire, sinon celle du patient au moment ou le devis est etabli.
+     */
+    protected function priseEnCharge(array $data): array
+    {
+        $type = $data['type_prise_en_charge'] ?? null;
+        $ipm = $data['ipm'] ?? null;
+        $assurance = $data['assurance'] ?? null;
+
+        if (! $type && ! empty($data['patient'])) {
+            $patient = Patient::find($data['patient']);
+            $type = $patient?->type_prise_en_charge;
+            $ipm = $patient?->ipm_id;
+            $assurance = $patient?->assurance_id;
+        }
+
+        return [
+            'type_prise_en_charge' => $type,
+            'ipm_id' => $type === 'IPM' ? $ipm : null,
+            'assurance_id' => $type === 'ASSURANCE' ? $assurance : null,
+        ];
     }
 
     protected function creerLignes(Devis $devis, array $lignes): float

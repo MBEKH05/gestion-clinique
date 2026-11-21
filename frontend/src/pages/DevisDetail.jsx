@@ -35,12 +35,15 @@ export default function DevisDetail() {
     return <div className="alert alert-warning">Devis introuvable.</div>;
   }
 
+  // Prise en charge du devis lui-meme (celle du patient a pu changer depuis).
+  const pec = devis.typePriseEnCharge ? devis : patient;
   const entiteNom =
-    patient?.typePriseEnCharge === 'IPM'
-      ? ipms.find((i) => i.id === patient.ipmId)?.nom
-      : patient?.typePriseEnCharge === 'ASSURANCE'
-        ? assurances.find((a) => a.id === patient?.assuranceId)?.nom
+    pec?.typePriseEnCharge === 'IPM'
+      ? ipms.find((i) => i.id === pec.ipmId)?.nom
+      : pec?.typePriseEnCharge === 'ASSURANCE'
+        ? assurances.find((a) => a.id === pec?.assuranceId)?.nom
         : null;
+  const patientPDF = patient ? { ...patient, typePriseEnCharge: pec?.typePriseEnCharge } : patient;
 
   const lignesParCategorie = {};
   devis.lignes.forEach((l) => {
@@ -70,7 +73,7 @@ export default function DevisDetail() {
           </button>
           <button
             className="btn btn-outline-primary"
-            onClick={() => generatePDFDevis(devis, patient, entiteNom)}
+            onClick={() => generatePDFDevis(devis, patientPDF, entiteNom)}
           >
             <i className="bi bi-file-earmark-pdf me-2"></i>PDF
           </button>
@@ -117,7 +120,7 @@ export default function DevisDetail() {
                 <strong>Matricule :</strong> {devis.patientMatricule}
               </div>
               <div>
-                <strong>Prise en charge :</strong> {patient?.typePriseEnCharge} {entiteNom ? `- ${entiteNom}` : ''}
+                <strong>Prise en charge :</strong> {pec?.typePriseEnCharge} {entiteNom ? `- ${entiteNom}` : ''}
               </div>
             </div>
           </div>

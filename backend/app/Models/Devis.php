@@ -23,6 +23,9 @@ class Devis extends Model
         'total',
         'souscripteur',
         'taux_couverture',
+        'type_prise_en_charge',
+        'ipm_id',
+        'assurance_id',
         'statut_paiement',
         'date_paiement',
         'commentaire_paiement',
@@ -48,6 +51,18 @@ class Devis extends Model
     public function createur()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** IPM qui prend ce devis en charge (au moment ou il a ete etabli). */
+    public function ipm()
+    {
+        return $this->belongsTo(Ipm::class, 'ipm_id');
+    }
+
+    /** Assurance qui prend ce devis en charge (au moment ou il a ete etabli). */
+    public function assurance()
+    {
+        return $this->belongsTo(Assurance::class, 'assurance_id');
     }
 
     public function lignes()

@@ -69,9 +69,8 @@ class StatistiqueController extends Controller
             Carbon::create($annee, 1, 1)->startOfDay(),
             Carbon::create($annee, 12, 31)->endOfDay()
         )
-            ->whereHas('patient', fn ($q) => $q
-                ->where('type_prise_en_charge', $data['type'])
-                ->where($colonne, $data['entite_id']))
+            ->where('type_prise_en_charge', $data['type'])
+            ->where($colonne, $data['entite_id'])
             ->get();
 
         $parMois = $devisList->groupBy(fn ($devis) => (int) $devis->date_creation->month);
@@ -109,8 +108,7 @@ class StatistiqueController extends Controller
     private function devisFactures(Carbon $debut, Carbon $fin)
     {
         return Devis::query()
-            ->select(['id', 'patient_id', 'total', 'taux_couverture', 'date_creation', 'statut_paiement', 'date_paiement', 'commentaire_paiement'])
-            ->with(['patient:id,type_prise_en_charge,ipm_id,assurance_id'])
+            ->select(['id', 'patient_id', 'total', 'taux_couverture', 'type_prise_en_charge', 'ipm_id', 'assurance_id', 'date_creation', 'statut_paiement', 'date_paiement', 'commentaire_paiement'])
             ->where('is_proforma', false)
             ->whereBetween('date_creation', [$debut, $fin]);
     }
@@ -123,13 +121,9 @@ class StatistiqueController extends Controller
         $groupes = [];
 
         foreach ($devisList as $devis) {
-            $patient = $devis->patient;
-
-            if (! $patient) {
-                continue;
-            }
-
-            $entiteId = $patient->type_prise_en_charge === 'IPM' ? $patient->ipm_id : $patient->assurance_id;
+            // Prise en charge enregistree sur le devis (pas la fiche actuelle du patient).
+            $type = $devis->type_prise_en_charge;
+            $entiteId = $type === 'IPM' ? $devis->ipm_id : ($type === 'ASSURANCE' ? $devis->assurance_id : null);
 
             if (! $entiteId) {
                 continue;
@@ -138,11 +132,11 @@ class StatistiqueController extends Controller
             $taux = is_numeric($devis->taux_couverture) ? (float) $devis->taux_couverture : 0.0;
             $montantCouvert = (float) $devis->total * (1 - ($taux / 100));
 
-            $key = $patient->type_prise_en_charge.':'.$entiteId;
+            $key = $type.':'.$entiteId;
 
             if (! isset($groupes[$key])) {
                 $groupes[$key] = [
-                    'type' => $patient->type_prise_en_charge,
+                    'type' => $type,
                     'entiteId' => $entiteId,
                     'montantCouvert' => 0.0,
                     'statuts' => [],

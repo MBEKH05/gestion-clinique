@@ -28,6 +28,9 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
   const [lignes, setLignes] = useState([]);
   const [justAddedId, setJustAddedId] = useState(null);
   const [tauxCouverture, setTauxCouverture] = useState('0');
+  // En modification : prise en charge ACTUELLE du patient, a ne pas ecraser
+  // avec celle (plus ancienne) du devis.
+  const [pecPatient, setPecPatient] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [existingPatientId, setExistingPatientId] = useState(null);
@@ -48,9 +51,12 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
           const patient = convertPatientFromAPI(p);
           setNomComplet(patient.nomComplet);
           setMatricule(patient.matricule);
-          setTypePriseEnCharge(patient.typePriseEnCharge);
-          setIpmId(patient.ipmId || '');
-          setAssuranceId(patient.assuranceId || '');
+          // Prise en charge du devis lui-meme (celle du patient a pu changer depuis).
+          const source = d.typePriseEnCharge ? d : patient;
+          setPecPatient({ typePriseEnCharge: patient.typePriseEnCharge, ipmId: patient.ipmId || '', assuranceId: patient.assuranceId || '' });
+          setTypePriseEnCharge(source.typePriseEnCharge);
+          setIpmId(source.ipmId || '');
+          setAssuranceId(source.assuranceId || '');
           setExistingPatientId(patient.id);
         })
         .catch(() => {})
@@ -131,13 +137,15 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
     setSaving(true);
     try {
       let patientId = existingPatientId;
-      const patientPayload = {
-        nomComplet,
-        matricule,
+      // Prise en charge choisie pour CE devis.
+      const pecDevis = {
         typePriseEnCharge,
         ipmId: typePriseEnCharge === 'IPM' ? ipmId : '',
         assuranceId: typePriseEnCharge === 'ASSURANCE' ? assuranceId : '',
       };
+      // Fiche patient : un nouveau devis met a jour la prise en charge du
+      // patient ; modifier un ancien devis ne touche pas sa prise en charge actuelle.
+      const patientPayload = { nomComplet, matricule, ...(isEdit && pecPatient ? pecPatient : pecDevis) };
 
       const { data: searchData } = await patientsAPI.search(matricule, 1, 20);
       const found = searchData.results
@@ -147,7 +155,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
       if (found) {
         patientId = found.id;
         const changed =
-          found.typePriseEnCharge !== typePriseEnCharge ||
+          found.typePriseEnCharge !== patientPayload.typePriseEnCharge ||
           found.ipmId !== patientPayload.ipmId ||
           found.assuranceId !== patientPayload.assuranceId;
         if (changed) {
@@ -164,6 +172,7 @@ export default function DevisForm({ isProforma: isProformaProp = false }) {
         patientId,
         souscripteur,
         tauxCouverture,
+        ...pecDevis,
         isProforma,
         lignes: lignes.map((l) => ({ analyseId: l.analyseId, prix: l.prix, quantite: l.quantite })),
       };

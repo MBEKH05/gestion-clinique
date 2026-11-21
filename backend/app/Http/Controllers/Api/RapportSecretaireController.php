@@ -39,7 +39,7 @@ class RapportSecretaireController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $devis = Devis::with(['patient.ipm:id,nom', 'patient.assurance:id,nom'])
+        $devis = Devis::with(['patient', 'ipm:id,nom', 'assurance:id,nom'])
             ->where('created_by', $cible->id)
             ->where('is_proforma', false)
             ->whereBetween('date_creation', [$debut, $fin])
@@ -185,8 +185,14 @@ class RapportSecretaireController extends Controller
             'date' => $d->date_creation->toIso8601String(),
             'patientNom' => $d->patient?->nom_complet,
             'patientMatricule' => $d->patient?->matricule,
-            'typePriseEnCharge' => $d->patient?->type_prise_en_charge,
-            'entiteNom' => $this->entiteNom($d->patient),
+            // Prise en charge du devis lui-meme (celle du patient a pu changer depuis).
+            'typePriseEnCharge' => $d->type_prise_en_charge,
+            'entiteNom' => match ($d->type_prise_en_charge) {
+                'IPM' => $d->ipm?->nom,
+                'ASSURANCE' => $d->assurance?->nom,
+                'CAISSE' => 'Caisse',
+                default => null,
+            },
             'tauxCouverture' => $d->taux_couverture,
             'total' => round($total, 2),
             'partCouverte' => round($total - $partPatient, 2),

@@ -44,6 +44,9 @@ export function convertDevisFromAPI(devis) {
     total: Number(devis.total),
     souscripteur: devis.souscripteur,
     tauxCouverture: devis.taux_couverture,
+    typePriseEnCharge: devis.type_prise_en_charge || null,
+    ipmId: devis.ipm || '',
+    assuranceId: devis.assurance || '',
     dateCreation: devis.date_creation,
     lignes: (devis.lignes || []).map(convertDevisLigneFromAPI),
     statutPaiement: devis.statut_paiement,
@@ -59,6 +62,14 @@ export function convertDevisToAPI(devis) {
     souscripteur: devis.souscripteur || null,
     taux_couverture: devis.tauxCouverture != null ? String(devis.tauxCouverture) : null,
     is_proforma: !!devis.isProforma,
+    // Prise en charge du devis (gardee meme si la fiche du patient change ensuite).
+    ...(devis.typePriseEnCharge
+      ? {
+          type_prise_en_charge: devis.typePriseEnCharge,
+          ipm: devis.typePriseEnCharge === 'IPM' ? devis.ipmId || null : null,
+          assurance: devis.typePriseEnCharge === 'ASSURANCE' ? devis.assuranceId || null : null,
+        }
+      : {}),
     lignes: (devis.lignes || []).map((l) => ({
       analyseId: l.analyseId,
       prix: l.prix,
