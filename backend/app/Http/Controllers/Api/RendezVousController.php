@@ -207,7 +207,9 @@ class RendezVousController extends Controller
 
     private function calculerCreneaux(Specialite $specialite, Carbon $date, ?string $exclure = null): array
     {
-        $ouvert = $specialite->actif && in_array($date->isoWeekday(), $specialite->joursListe(), true);
+        // Plages de consultation du jour choisi (horaires jour par jour).
+        $plages = $specialite->plagesDuJour($date->isoWeekday());
+        $ouvert = $specialite->actif && count($plages) > 0;
 
         $pris = RendezVous::where('specialite_id', $specialite->id)
             ->whereDate('date', $date->toDateString())
@@ -218,20 +220,22 @@ class RendezVousController extends Controller
 
         $creneaux = [];
         if ($ouvert) {
-            $heure = $date->copy()->setTimeFromTimeString((string) $specialite->heure_debut);
-            $fin = $date->copy()->setTimeFromTimeString((string) $specialite->heure_fin);
             $maintenant = now();
-            while ($heure->copy()->addMinutes($specialite->duree_creneau)->lte($fin)) {
-                $h = $heure->format('H:i');
-                $nb = (int) ($pris[$h] ?? 0);
-                $creneaux[] = [
-                    'heure' => $h,
-                    'pris' => $nb,
-                    'capacite' => (int) $specialite->patients_par_creneau,
-                    'passe' => $heure->lt($maintenant),
-                    'libre' => $nb < $specialite->patients_par_creneau && $heure->gte($maintenant),
-                ];
-                $heure->addMinutes($specialite->duree_creneau);
+            foreach ($plages as $plage) {
+                $heure = $date->copy()->setTimeFromTimeString($plage['debut']);
+                $fin = $date->copy()->setTimeFromTimeString($plage['fin']);
+                while ($heure->copy()->addMinutes($specialite->duree_creneau)->lte($fin)) {
+                    $h = $heure->format('H:i');
+                    $nb = (int) ($pris[$h] ?? 0);
+                    $creneaux[] = [
+                        'heure' => $h,
+                        'pris' => $nb,
+                        'capacite' => (int) $specialite->patients_par_creneau,
+                        'passe' => $heure->lt($maintenant),
+                        'libre' => $nb < $specialite->patients_par_creneau && $heure->gte($maintenant),
+                    ];
+                    $heure->addMinutes($specialite->duree_creneau);
+                }
             }
         }
 
@@ -239,6 +243,7 @@ class RendezVousController extends Controller
             'specialite' => SpecialiteController::formatStatic($specialite),
             'date' => $date->toDateString(),
             'ouvert' => $ouvert,
+            'plages' => $plages,
             'creneaux' => $creneaux,
         ];
     }

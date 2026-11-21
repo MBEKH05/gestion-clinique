@@ -41,6 +41,22 @@ class Specialite extends Model
         return array_values(array_filter(array_map('intval', explode(',', (string) $this->jours))));
     }
 
+    public function horaires()
+    {
+        return $this->hasMany(SpecialiteHoraire::class, 'specialite_id')->orderBy('jour')->orderBy('heure_debut');
+    }
+
+    /** Plages de consultation d'un jour (1 = lundi ... 7 = dimanche), triees par heure. */
+    public function plagesDuJour(int $jour): array
+    {
+        return $this->horaires
+            ->where('jour', $jour)
+            ->map(fn ($h) => ['debut' => substr((string) $h->heure_debut, 0, 5), 'fin' => substr((string) $h->heure_fin, 0, 5)])
+            ->sortBy('debut')
+            ->values()
+            ->all();
+    }
+
     public function rendezVous()
     {
         return $this->hasMany(RendezVous::class, 'specialite_id');

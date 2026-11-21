@@ -54,7 +54,7 @@ export default function CreneauxPicker({ specialiteId, date, value, onChange, ex
   return (
     <div>
       <div className="small text-muted mb-2">
-        {libres} creneau(x) libre(s) - {planning.specialite.heureDebut} a {planning.specialite.heureFin}, {planning.specialite.dureeCreneau} min
+        {libres} creneau(x) libre(s) - {(planning.plages || []).map((p) => `${p.debut} a ${p.fin}`).join(' et ')}, {planning.specialite.dureeCreneau} min
         {capacite > 1 ? `, ${capacite} patients par creneau` : ''}
       </div>
       <div className="d-flex flex-wrap gap-2">

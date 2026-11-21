@@ -7,26 +7,33 @@ use App\Models\RendezVous;
 use App\Models\Specialite;
 use App\Support\Sanitizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class SpecialiteController extends Controller
 {
     public function index()
     {
-        return response()->json(Specialite::orderBy('nom')->get()->map(fn ($s) => $this->format($s)));
+        return response()->json(Specialite::with('horaires')->orderBy('nom')->get()->map(fn ($s) => $this->format($s)));
     }
 
     public function store(Request $request)
     {
         $data = $this->valider($request);
 
-        if (Specialite::where('nom', $data['nom'])->exists()) {
+        if (Specialite::where('nom', $data['specialite']['nom'])->exists()) {
             return response()->json(['detail' => 'Cette specialite existe deja.'], 400);
         }
 
-        $specialite = Specialite::create($data + ['actif' => true]);
+        $specialite = DB::transaction(function () use ($data) {
+            $specialite = Specialite::create($data['specialite'] + ['actif' => true]);
+            $this->enregistrerHoraires($specialite, $data['horaires']);
 
-        return response()->json($this->format($specialite), 201);
+            return $specialite;
+        });
+
+        return response()->json($this->format($specialite->load('horaires')), 201);
     }
 
     public function update(Request $request, string $id)
@@ -34,17 +41,20 @@ class SpecialiteController extends Controller
         $specialite = Specialite::findOrFail($id);
         $data = $this->valider($request, $specialite);
 
-        if (Specialite::where('nom', $data['nom'])->whereKeyNot($id)->exists()) {
+        if (Specialite::where('nom', $data['specialite']['nom'])->whereKeyNot($id)->exists()) {
             return response()->json(['detail' => 'Cette specialite existe deja.'], 400);
         }
 
         if ($request->has('actif')) {
-            $data['actif'] = $request->boolean('actif');
+            $data['specialite']['actif'] = $request->boolean('actif');
         }
 
-        $specialite->update($data);
+        DB::transaction(function () use ($specialite, $data) {
+            $specialite->update($data['specialite']);
+            $this->enregistrerHoraires($specialite, $data['horaires']);
+        });
 
-        return response()->json($this->format($specialite));
+        return response()->json($this->format($specialite->load('horaires')));
     }
 
     public function destroy(string $id)
@@ -62,32 +72,68 @@ class SpecialiteController extends Controller
         return response()->json(null, 204);
     }
 
+    /**
+     * Horaires : liste de plages {jour (1 = lundi ... 7 = dimanche), debut, fin},
+     * plusieurs plages possibles le meme jour (sans chevauchement).
+     */
     private function valider(Request $request, ?Specialite $specialite = null): array
     {
         $data = $request->validate([
             'nom' => 'required|string|max:100',
             'duree_creneau' => 'required|integer|min:5|max:240',
-            'heure_debut' => 'required|date_format:H:i',
-            'heure_fin' => 'required|date_format:H:i|after:heure_debut',
-            'jours' => 'required|array|min:1',
-            'jours.*' => ['integer', Rule::in([1, 2, 3, 4, 5, 6, 7])],
             'patients_par_creneau' => 'required|integer|min:1|max:50',
+            'horaires' => 'required|array|min:1',
+            'horaires.*.jour' => ['required', 'integer', Rule::in([1, 2, 3, 4, 5, 6, 7])],
+            'horaires.*.debut' => 'required|date_format:H:i',
+            'horaires.*.fin' => 'required|date_format:H:i',
         ], [
-            'heure_fin.after' => "L'heure de fin doit etre apres l'heure de debut.",
-            'jours.required' => 'Choisissez au moins un jour de consultation.',
+            'horaires.required' => 'Choisissez au moins un jour de consultation.',
+            'horaires.min' => 'Choisissez au moins un jour de consultation.',
         ]);
 
-        $jours = array_values(array_unique(array_map('intval', $data['jours'])));
-        sort($jours);
+        $jours = ['', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+        $plages = collect($data['horaires'])
+            ->map(fn ($h) => ['jour' => (int) $h['jour'], 'debut' => $h['debut'], 'fin' => $h['fin']])
+            ->sortBy(fn ($h) => $h['jour'].' '.$h['debut'])
+            ->values();
+
+        foreach ($plages as $h) {
+            if ($h['fin'] <= $h['debut']) {
+                throw ValidationException::withMessages(['horaires' => "Le {$jours[$h['jour']]}, l'heure de fin ({$h['fin']}) doit etre apres l'heure de debut ({$h['debut']})."]);
+            }
+        }
+        foreach ($plages->groupBy('jour') as $jour => $duJour) {
+            for ($k = 1; $k < $duJour->count(); $k++) {
+                if ($duJour[$k]['debut'] < $duJour[$k - 1]['fin']) {
+                    throw ValidationException::withMessages(['horaires' => "Le {$jours[$jour]}, les plages {$duJour[$k - 1]['debut']}-{$duJour[$k - 1]['fin']} et {$duJour[$k]['debut']}-{$duJour[$k]['fin']} se chevauchent."]);
+                }
+            }
+        }
 
         return [
-            'nom' => Sanitizer::sanitizeString($data['nom'], 100),
-            'duree_creneau' => (int) $data['duree_creneau'],
-            'heure_debut' => $data['heure_debut'] . ':00',
-            'heure_fin' => $data['heure_fin'] . ':00',
-            'jours' => implode(',', $jours),
-            'patients_par_creneau' => (int) $data['patients_par_creneau'],
+            'specialite' => [
+                'nom' => Sanitizer::sanitizeString($data['nom'], 100),
+                'duree_creneau' => (int) $data['duree_creneau'],
+                'patients_par_creneau' => (int) $data['patients_par_creneau'],
+                // Anciennes colonnes gardees a jour (resume des horaires).
+                'jours' => $plages->pluck('jour')->unique()->implode(','),
+                'heure_debut' => $plages->min('debut').':00',
+                'heure_fin' => $plages->max('fin').':00',
+            ],
+            'horaires' => $plages->all(),
         ];
+    }
+
+    private function enregistrerHoraires(Specialite $specialite, array $plages): void
+    {
+        $specialite->horaires()->delete();
+        foreach ($plages as $h) {
+            $specialite->horaires()->create([
+                'jour' => $h['jour'],
+                'heure_debut' => $h['debut'].':00',
+                'heure_fin' => $h['fin'].':00',
+            ]);
+        }
     }
 
     public static function formatStatic(Specialite $s): array
@@ -99,7 +145,12 @@ class SpecialiteController extends Controller
             'dureeCreneau' => (int) $s->duree_creneau,
             'heureDebut' => substr((string) $s->heure_debut, 0, 5),
             'heureFin' => substr((string) $s->heure_fin, 0, 5),
-            'jours' => $s->joursListe(),
+            'jours' => $s->horaires->pluck('jour')->unique()->values()->all(),
+            'horaires' => $s->horaires->map(fn ($h) => [
+                'jour' => (int) $h->jour,
+                'debut' => substr((string) $h->heure_debut, 0, 5),
+                'fin' => substr((string) $h->heure_fin, 0, 5),
+            ])->values()->all(),
             'patientsParCreneau' => (int) $s->patients_par_creneau,
         ];
     }
